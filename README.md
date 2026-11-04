@@ -31,8 +31,10 @@ script errors, instead of showing "Loading…" forever.
 ## Tests
 
 ```sh
-node tests/run.js                 # 187 checks, Node 18+, no dependencies
+node tests/run.js                 # unit + NumPy-reference + per-visualisation tests, no dependencies
 python3 tests/make_fixtures.py    # regenerate NumPy reference results (needs numpy)
+npm run smoke -- 1.2              # browser check + screenshots of the visualisation, light and dark
+npm run smoke -- 1.2 --no-shots   # same checks, no screenshots
 ```
 
 `tests/fixtures.json` holds results computed by NumPy/LAPACK (eigenvalues, ‖·‖₂, rank
@@ -115,12 +117,30 @@ Edit `content/courses.js`.
 
 `CLAUDE.md` holds the rules and the definition of done. Claude Code loads it automatically.
 
+A batch is built in three phases, so the shared parts exist before anything is built on top of them:
+
+1. **Plan** — the supervisor lists every toolkit component, scene element and maths helper the batch
+   needs that doesn't exist yet, and writes `docs/plans/<batch>.md`.
+2. **Toolkit** — one builder adds all of those parts in general form (both stages, scene-format docs,
+   gallery demos, maths with NumPy fixtures) plus the batch's manifest entries as placeholders.
+   Reviewed and committed before anything else starts.
+3. **Visualisations** — one builder per visualisation, running **in parallel** in its own git
+   worktree. Each may only touch `js/viz/<file>.js`, `tests/viz/<id>.test.js`,
+   `docs/reports/<id>.md` and its own manifest `status`. Passing branches are merged one at a time,
+   with `npm test` and a smoke run after each merge. Anything that still fails after two fix rounds
+   stays on its branch and is marked BLOCKED.
+
 - **Supervised (recommended):** run Claude Code with Opus as the main model, then
-  `/build-visualisations 1.2 1.3 2.1 2.2 2.3 3.1 3.2 3.3`. Opus briefs the `viz-builder` subagent
-  (Sonnet) for each id, reviews its work (tests, browser screenshots, NumPy spot checks, the notes),
-  sends fixes back to the same subagent, and commits each visualisation that passes.
-- **Unattended:** `scripts/build-all.sh 1.2 1.3 …` alternates a Sonnet builder and an Opus
-  reviewer (`viz-reviewer`) in headless runs, with up to 3 fix rounds, and commits or stashes each one.
+  `/build-visualisations 1.3 2.1 2.2 --parallel 2`. The supervisor plans, briefs, decides and
+  commits; the `viz-reviewer` subagent (Opus) does the detailed review — tests, screenshots, NumPy
+  spot checks, the notes — and returns a short pass/fail with at most 8 fixes.
+- **Unattended:** `scripts/build-all.sh --parallel 2 1.3 2.1 2.2` does the same headless, printing
+  `total_cost_usd` per visualisation and a batch total.
 - **One model, step by step:** paste `docs/prompts/sonnet-lectures-1-3.md`.
 
-Progress goes to `docs/progress.md`, builder reports to `docs/reports/<id>.md`.
+The course notes are read as text, not as a PDF: `docs/la_notes.txt` with `docs/la_notes_index.md`
+(every definition, theorem, lemma, example and equation → page and line). Regenerate with
+`pdftotext -layout docs/la_2020_HUGE.pdf docs/la_notes.txt` (needs poppler).
+
+Progress goes to `docs/progress.md`, builder reports to `docs/reports/<id>.md`, plans to
+`docs/plans/<batch>.md`.
