@@ -1,0 +1,4 @@
+node_modules/
+tests/shots/
+logs/
+.DS_Store

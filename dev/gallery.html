@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Toolkit gallery</title>
+<link rel="stylesheet" href="../css/fonts.css">
+<link rel="stylesheet" href="../css/style.css">
+<style>
+  .gallery { max-width: 1160px; margin: 0 auto; padding: 24px 16px 64px; display: flex; flex-direction: column; gap: 24px; }
+  .gallery-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; align-items: start; }
+  .demo { border: 1px solid var(--line); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .demo h2 { margin: 0; font-size: 15px; }
+  .demo code { font-size: 12.5px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div id="app" class="gallery"><p class="muted">Loading…</p></div>
+<script src="../vendor/preact/htm-preact-standalone.umd.js"></script>
+<script src="../js/core.js"></script>
+<script src="../js/math/linalg.js"></script>
+<script src="../js/toolkit/ui.js"></script>
+<script src="../js/toolkit/stage2d.js"></script>
+<script src="../js/toolkit/stage3d.js"></script>
+<script>
+(function () {
+  var SV = window.SV, ui = SV.ui, html = ui.html;
+
+  function Gallery() {
+    var st = ui.useMerge({ seg: 2, check: true, slider: 0.5, A: [[1, 2], [3, 4]], p: [1.5, 1, 0.5], dark: false }), s = st[0], set = st[1];
+    var at = s.p;
+    var scene2 = { dim: 2, step: 0.5, lines: [{ dir: [0.894, 0.447], color: 'accent' }],
+      arrows: [{ from: [0, 0, 0], to: at, color: 'q2' }],
+      points: [{ id: 'p', at: at, color: 'q2', label: 'p', onMove: function (v) { set({ p: v.map(function (x) { return Math.round(x * 2) / 2; }) }); } }] };
+    var scene3 = Object.assign({}, scene2, { dim: 3, drops: true, planes: [{ basis: [[1, 0, 0], [0, 0.6, 0.8]], color: 'accent' }], lines: [] });
+    var det = s.A[0][0] * s.A[1][1] - s.A[0][1] * s.A[1][0];
+    return html`
+      <div class="row" style="justify-content: space-between">
+        <h1 class="page-title">Toolkit gallery</h1>
+        <${ui.Btn} onClick=${function () {
+          var d = document.documentElement, next = d.dataset.theme === 'dark' ? 'light' : 'dark'; d.dataset.theme = next; set({ dark: next === 'dark' });
+        }}>Toggle theme<//>
+      </div>
+      <p class="lead">Every shared piece in one place. Use it to check a component after changing it.</p>
+      <div class="gallery-grid">
+        <div class="demo"><h2>Seg · Check · Btn</h2>
+          <${ui.Seg} label="Space" value=${s.seg} onChange=${function (v) { set({ seg: v }); }} options=${[{ value: 2, label: 'ℝ²' }, { value: 3, label: 'ℝ³' }]} />
+          <${ui.Check} label="Snap to grid" checked=${s.check} onChange=${function (v) { set({ check: v }); }} />
+          <div class="row"><${ui.Btn} primary>Primary<//><${ui.Btn}>Secondary<//></div>
+          <code>ui.Seg · ui.Check · ui.Btn</code></div>
+        <div class="demo"><h2>Slider</h2>
+          <${ui.Slider} label="α₁" cls="q1" min="-2" max="2" step="0.1" value=${s.slider} display=${SV.linalg.fmt(s.slider)} onInput=${function (x) { set({ slider: x }); }} />
+          <code>ui.Slider</code></div>
+        <div class="demo"><h2>MatrixEditor + Tex</h2>
+          <${ui.MatrixEditor} value=${s.A} onChange=${function (i, j, x) { set(function (o) { var A = o.A.map(function (r) { return r.slice(); }); A[i][j] = x; return { A: A }; }); }} />
+          <${ui.Tex} display tex=${'\\det A = ' + SV.linalg.fmtTex(det)} />
+          <code>ui.MatrixEditor · ui.Tex (KaTeX)</code></div>
+        <div class="demo"><h2>Panel · KV</h2>
+          <${ui.Panel} title="Fixed by system" muted><${ui.KV} items=${[['tol', '1e-10·max(1, ‖A‖₂)'], ['axes', '[−3, 3]']]} /><//>
+          <code>ui.Panel · ui.KV</code></div>
+        <div class="demo"><h2>Chart (Observable Plot)</h2>
+          <${ui.Chart} aria="Example log-log chart" deps=${[s.dark]} make=${function (Plot) {
+            var data = []; for (var e = -12; e <= 0; e += 0.5) data.push({ eps: Math.pow(10, e), err: Math.pow(10, e) * 1e3 + 1e-16 });
+            return { height: 220, x: { type: 'log', label: 'ε' }, y: { type: 'log', label: 'error' }, grid: true,
+              marks: [Plot.line(data, { x: 'eps', y: 'err', stroke: 'var(--q2)', strokeWidth: 2 })] };
+          }} />
+          <code>ui.Chart</code></div>
+        <div class="demo"><h2>Stage2D</h2>
+          <div class="figure-box"><${SV.stage.Stage} scene=${scene2} /></div>
+          <code>stage.Stage · dim 2</code></div>
+        <div class="demo"><h2>Stage3D (three.js)</h2>
+          <div class="figure-box"><${SV.stage.Stage} scene=${scene3} /></div>
+          <code>stage.Stage · dim 3</code></div>
+      </div>`;
+  }
+  SV.load(['katex', 'plot']).then(function () {
+    window.htmPreact.render(window.htmPreact.h(Gallery), document.getElementById('app'));
+    SV.booted = true;
+  }, function (e) { document.getElementById('app').textContent = e.message; });
+})();
+</script>
+</body>
+</html>

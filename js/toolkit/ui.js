@@ -1,0 +1,124 @@
+/* Toolkit: controls and panels shared by all visualisations.
+   Components are Preact function components written with htm (no build step). */
+(function (root) {
+  'use strict';
+  var P = root.htmPreact, html = P.html, useState = P.useState, useEffect = P.useEffect, useRef = P.useRef;
+  var SV = root.SV;
+  var uid = 0;
+  function useId(prefix) { var r = useRef(null); if (r.current == null) r.current = (prefix || 'sv') + '-' + (++uid); return r.current; }
+
+  /** State hook with object merge: const [s, set] = useMerge(init); set({ k: 3 }) or set(s => patch). */
+  function useMerge(init) {
+    var st = useState(init), s = st[0], setS = st[1];
+    function set(patch) {
+      setS(function (old) {
+        var p = typeof patch === 'function' ? patch(old) : patch;
+        return p ? Object.assign({}, old, p) : old;
+      });
+    }
+    return [s, set];
+  }
+
+  /** Segmented single choice: options [{ value, label, aria? }] */
+  function Seg(props) {
+    var labelId = useId('seg');
+    return html`<div class="row">
+      ${props.label && html`<span class="muted" id=${labelId}>${props.label}</span>`}
+      <div class="seg" role="group" aria-labelledby=${props.label ? labelId : null} aria-label=${props.label ? null : props.aria}>
+        ${props.options.map(function (o) {
+          return html`<button type="button" class=${'seg-btn' + (props.mono ? ' mono' : '')} aria-pressed=${String(o.value === props.value)}
+            aria-label=${o.aria || null} onClick=${function () { props.onChange(o.value); }}>${o.label}</button>`;
+        })}
+      </div></div>`;
+  }
+
+  function Check(props) {
+    return html`<label class="check"><input type="checkbox" checked=${props.checked}
+      onChange=${function (e) { props.onChange(e.currentTarget.checked); }} /> ${props.label}</label>`;
+  }
+
+  function Btn(props) {
+    return html`<button type="button" class=${'btn' + (props.primary ? ' primary' : '')} onClick=${props.onClick}
+      disabled=${props.disabled}>${props.children}</button>`;
+  }
+
+  /** Range slider with a label and a formatted value. */
+  function Slider(props) {
+    var id = useId('sl');
+    return html`<div class="slider-row">
+      <label for=${id} class=${'slider-label ' + (props.cls || '')}>${props.label}</label>
+      <input id=${id} type="range" class=${props.cls || ''} min=${props.min} max=${props.max} step=${props.step} value=${props.value}
+        onInput=${function (e) { props.onInput(parseFloat(e.currentTarget.value)); }} />
+      <output for=${id} class="mono">${props.display != null ? props.display : props.value}</output>
+    </div>`;
+  }
+
+  /** Editable matrix (array of rows). Keeps the typed text until it parses, then commits. */
+  function MatrixEditor(props) {
+    var A = props.value, name = props.name || 'a';
+    var drafts = useState({}), d = drafts[0], setD = drafts[1];
+    return html`<fieldset class="matrix-editor">
+      <legend>${props.legend || 'Matrix A'}</legend>
+      <div class="matrix-grid" style=${'grid-template-columns: repeat(' + A[0].length + ', minmax(0, 4.5em))'}>
+        ${A.map(function (row, i) { return row.map(function (v, j) {
+          var key = i + ',' + j, text = d[key] != null ? d[key] : SV.linalg.fmt(v).replace('−', '-');
+          var bad = d[key] != null && !isFinite(parseFloat(d[key]));
+          return html`<input class=${'mono' + (bad ? ' invalid' : '')} inputmode="decimal" aria-label=${name + (i + 1) + (j + 1)}
+            aria-invalid=${bad ? 'true' : null} value=${text}
+            onInput=${function (e) {
+              var t = e.currentTarget.value.replace('−', '-'), x = Number(t);
+              setD(Object.assign({}, d, (function () { var o = {}; o[key] = t; return o; })()));
+              if (t.trim() !== '' && isFinite(x)) props.onChange(i, j, x);
+            }}
+            onBlur=${function () { var o = Object.assign({}, d); delete o[key]; setD(o); }} />`;
+        }); })}
+      </div>
+    </fieldset>`;
+  }
+
+  function Panel(props) {
+    return html`<section class=${'panel' + (props.muted ? ' panel-muted' : '') + (props.cls ? ' ' + props.cls : '')}
+      aria-live=${props.live ? 'polite' : null}>
+      <h2 class="panel-title">${props.title}</h2>${props.children}</section>`;
+  }
+
+  /** Definition list from [[term, value], ...]; values may be strings or vnodes. */
+  function KV(props) {
+    return html`<dl class=${'kv ' + (props.cls || 'small')}>${props.items.map(function (it) {
+      return [html`<dt>${it[0]}</dt>`, html`<dd class=${it[2] || ''}>${it[1]}</dd>`];
+    })}</dl>`;
+  }
+
+  /* KaTeX. \htmlClass{q1}{...} is allowed so formula parts can take series colours from CSS. */
+  var texOpts = function (display) {
+    return { throwOnError: false, displayMode: !!display, output: 'htmlAndMathml',
+      trust: function (ctx) { return ctx.command === '\\htmlClass'; }, strict: false };
+  };
+  function Tex(props) {
+    var ref = useRef(null);
+    useEffect(function () {
+      if (!ref.current) return;
+      if (root.katex) root.katex.render(props.tex, ref.current, texOpts(props.display));
+      else ref.current.textContent = props.fallback || props.tex;
+    }, [props.tex, props.display]);
+    return html`<span ref=${ref} class=${'tex' + (props.display ? ' tex-display' : '') + (props.cls ? ' ' + props.cls : '')}></span>`;
+  }
+
+  /** Observable Plot chart. props.make(Plot, width) returns Plot options; re-rendered when deps change. */
+  function Chart(props) {
+    var ref = useRef(null);
+    useEffect(function () {
+      var el = ref.current;
+      if (!el) return;
+      if (!root.Plot) { el.textContent = 'Chart library not loaded.'; return; }
+      var w = Math.max(280, Math.round(el.clientWidth || 600));
+      var node = root.Plot.plot(Object.assign({ width: w, style: { background: 'transparent', color: 'var(--text)', fontFamily: 'var(--font)' } }, props.make(root.Plot, w)));
+      el.replaceChildren(node);
+      return function () { el.replaceChildren(); };
+    }, props.deps || []);
+    return html`<figure class="chart" ref=${ref} aria-label=${props.aria || null} role=${props.aria ? 'img' : null}></figure>`;
+  }
+
+  SV.ui = { html: html, useMerge: useMerge, useId: useId, Seg: Seg, Check: Check, Btn: Btn, Slider: Slider,
+    MatrixEditor: MatrixEditor, Panel: Panel, KV: KV, Tex: Tex, Chart: Chart };
+})(window);
