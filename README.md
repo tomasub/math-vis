@@ -110,3 +110,17 @@ Edit `content/courses.js`.
 - Rank and zero decisions use `tol = 1e-10·max(1, ‖A‖₂)`, shown in the UI.
 - Colours only through CSS tokens (`--q1`…`--q4` for series, `--accent`, `--warn`, …).
 - Undefined values are shown as undefined, with the reason, never as a number.
+
+## Building more visualisations with Claude Code
+
+`CLAUDE.md` holds the rules and the definition of done. Claude Code loads it automatically.
+
+- **Supervised (recommended):** run Claude Code with Opus as the main model, then
+  `/build-visualisations 1.2 1.3 2.1 2.2 2.3 3.1 3.2 3.3`. Opus briefs the `viz-builder` subagent
+  (Sonnet) for each id, reviews its work (tests, browser screenshots, NumPy spot checks, the notes),
+  sends fixes back to the same subagent, and commits each visualisation that passes.
+- **Unattended:** `scripts/build-all.sh 1.2 1.3 …` alternates a Sonnet builder and an Opus
+  reviewer (`viz-reviewer`) in headless runs, with up to 3 fix rounds, and commits or stashes each one.
+- **One model, step by step:** paste `docs/prompts/sonnet-lectures-1-3.md`.
+
+Progress goes to `docs/progress.md`, builder reports to `docs/reports/<id>.md`.
