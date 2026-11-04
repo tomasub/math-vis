@@ -33,6 +33,15 @@
       arrows: [{ from: [0, 0, 0], to: at, color: 'q2' }],
       points: [{ id: 'p', at: at, color: 'q2', label: 'p', onMove: function (v) { set({ p: v.map(function (x) { return Math.round(x * 2) / 2; }) }); } }] };
     var scene3 = Object.assign({}, scene2, { dim: 3, drops: true, planes: [{ basis: [[1, 0, 0], [0, 0.6, 0.8]], color: 'accent' }], lines: [] });
+    var sceneAffine2 = { dim: 2, step: 0.5,
+      lines: [{ dir: [1, 0.3], color: 'muted' }, { dir: [1, 0.3], at: [0.3, 1.4], color: 'accent' }],
+      dots: [{ at: [0.3, 1.4], color: 'accent', r: 5, label: 'xₚ' }] };
+    var sceneAffine3 = { dim: 3, drops: true,
+      planes: [{ basis: [[1, 0, 0], [0, 1, 0]], color: 'muted' }, { basis: [[1, 0, 0], [0, 1, 0]], at: [0, 0, 1.4], color: 'accent' }],
+      dots: [{ at: [0, 0, 1.4], color: 'accent', r: 5, label: 'xₚ' }] };
+    var sceneLabelAt = { dim: 2, step: 0.5,
+      arrows: [{ from: [0, 0, 0], to: [1.6, 1.1, 0], color: 'q3', label: 'Ax', labelColor: 'q3' }],
+      dots: [{ at: [1.6, 1.1, 0], color: 'warn', r: 5, label: 'proj(b)', labelColor: 'warn', labelAt: [2.2, 1.51, 0] }] };
     var det = s.A[0][0] * s.A[1][1] - s.A[0][1] * s.A[1][0];
     return html`
       <div class="row" style="justify-content: space-between">
@@ -71,6 +80,20 @@
         <div class="demo"><h2>Stage3D (three.js)</h2>
           <div class="figure-box"><${SV.stage.Stage} scene=${scene3} /></div>
           <code>stage.Stage · dim 3</code></div>
+        <div class="demo"><h2>Affine line + labeled dot (2D)</h2>
+          <div class="figure-box"><${SV.stage.Stage} scene=${sceneAffine2} /></div>
+          <code>lines: [{ at }] · dots: [{ label }]</code></div>
+        <div class="demo"><h2>Affine plane + labeled dot (3D)</h2>
+          <div class="figure-box"><${SV.stage.Stage} scene=${sceneAffine3} /></div>
+          <code>planes: [{ at }] · dots: [{ label }]</code></div>
+        <div class="demo"><h2>Dot label offset (labelAt)</h2>
+          <div class="figure-box"><${SV.stage.Stage} scene=${sceneLabelAt} /></div>
+          <code>dots: [{ at, labelAt }] — label moved off the arrowhead it would otherwise overlap</code></div>
+        <div class="demo"><h2>PredictReveal</h2>
+          <${ui.PredictReveal} prompt="How many solutions does Ax = b have?"
+            options=${[{ value: 0, label: '0' }, { value: 1, label: '1' }, { value: 'inf', label: '∞' }]}
+            correct="inf" render=${function (c) { return 'The matrix is rank-deficient, so N(A) ≠ {0} and the answer is ' + c + '.'; }} />
+          <code>ui.PredictReveal</code></div>
       </div>`;
   }
   SV.load(['katex', 'plot']).then(function () {

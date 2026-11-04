@@ -12,14 +12,25 @@
      grid: true, axes: true, axisLabels: ['x₁', 'x₂', 'x₃'],
      fillAll: 'accent',          // tint the whole plane (2D)
      box: 'accent',              // wireframe cube ±3 (3D)
-     planes:   [{ basis: [a, b], half: 3.6, color }],          // planes through 0 (3D)
-     lines:    [{ dir, color, band: true }],                   // lines through 0
+     planes:   [{ basis: [a, b], at, half: 3.6, color }],       // plane through `at` (default origin)
+     lines:    [{ dir, at, color, band: true }],                // line through `at` (default origin)
      segments: [{ from, to, color, dash: true, width }],
      arrows:   [{ from, to, color, width, label, labelColor }],
-     dots:     [{ at, color, r, opacity }],
+     dots:     [{ at, color, r, opacity, label, labelColor, labelAt }],
      points:   [{ id, at, color, label, aria, onMove(v) }],    // draggable + keyboard
      drops: true                                               // 3D: dashed drop lines to x₃ = 0
    }
+
+   `lines` and `planes` are affine: `at` shifts them off the origin (e.g. a solution set
+   x_p + N(A), Lemma 1.1.2), while `dir`/`basis` stay the direction/spanning vectors. Omit
+   `at` (or pass [0,0,0]) for the usual through-the-origin subspace.
+
+   A dot's `labelAt` lets the label sit somewhere other than right next to the dot's own
+   `at` (both are world points; the label is still placed with the usual small pixel
+   offset from wherever `labelAt` projects to). Use it to move a label off something else
+   it would otherwise overlap, e.g. an arrowhead that also radiates from the origin:
+   placing the label further out along the same ray than the dot itself. Omit `labelAt`
+   (the default) to label right next to the dot, as before.
 */
 (function (root) {
   'use strict';
@@ -148,15 +159,16 @@
       <path class="grid-major" d=${gMaj}></path>
       ${cube && html`<path class="box" d=${cube} style=${'stroke:' + col(sc.box === true ? 'accent' : sc.box)}></path>`}
       ${(sc.planes || []).map(function (pl) {
-        var a = pad3(pl.basis[0]), b = pad3(pl.basis[1]), h = pl.half || 3.6;
+        var a = pad3(pl.basis[0]), b = pad3(pl.basis[1]), h = pl.half || 3.6, at = pad3(pl.at || [0, 0, 0]);
         var pts = [[1, 1], [1, -1], [-1, -1], [-1, 1]].map(function (s) {
-          var q = proj([0, 1, 2].map(function (l) { return h * (s[0] * a[l] + s[1] * b[l]); }));
+          var q = proj([0, 1, 2].map(function (l) { return at[l] + h * (s[0] * a[l] + s[1] * b[l]); }));
           return r2(q[0]) + ',' + r2(q[1]);
         }).join(' ');
         return html`<polygon class="plane" points=${pts} style=${'fill:' + col(pl.color || 'accent') + ';stroke:' + col(pl.color || 'accent')}></polygon>`;
       })}
       ${(sc.lines || []).map(function (l) {
-        var d3 = pad3(l.dir), L = ext * 4, dd = seg(d3.map(function (x) { return -L * x; }), d3.map(function (x) { return L * x; }));
+        var d3 = pad3(l.dir), L = ext * 4, at = pad3(l.at || [0, 0, 0]);
+        var dd = seg(at.map(function (x, i) { return x - L * d3[i]; }), at.map(function (x, i) { return x + L * d3[i]; }));
         return html`<g>${l.band !== false && html`<path class="line-band" d=${dd} style=${'stroke:' + col(l.color || 'accent')}></path>`}
           <path class="line" d=${dd} style=${'stroke:' + col(l.color || 'accent')}></path></g>`;
       })}
@@ -164,8 +176,11 @@
       ${labels}
       <path class="drop" d=${drops}></path>
       ${(sc.dots || []).map(function (d) {
-        var q = proj(d.at);
-        return html`<circle cx=${r2(q[0])} cy=${r2(q[1])} r=${d.r || 4} style=${'fill:' + col(d.color) + ';fill-opacity:' + (d.opacity != null ? d.opacity : 1)}></circle>`;
+        var q = proj(d.at), lq = d.labelAt ? proj(d.labelAt) : q;
+        return html`<g>
+          <circle cx=${r2(q[0])} cy=${r2(q[1])} r=${d.r || 4} style=${'fill:' + col(d.color) + ';fill-opacity:' + (d.opacity != null ? d.opacity : 1)}></circle>
+          ${d.label && html`<text class="arrow-label" x=${r2(lq[0] + 9)} y=${r2(lq[1] - 9)} style=${'fill:' + col(d.labelColor || d.color)}>${d.label}</text>`}
+        </g>`;
       })}
       ${(sc.segments || []).map(function (s) {
         return html`<path class=${'segment' + (s.dash ? ' dash' : '')} d=${seg(s.from, s.to)} style=${'stroke:' + col(s.color) + ';stroke-width:' + (s.width || 2)}></path>`;

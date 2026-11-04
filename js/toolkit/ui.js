@@ -104,6 +104,39 @@
     return html`<span ref=${ref} class=${'tex' + (props.display ? ' tex-display' : '') + (props.cls ? ' ' + props.cls : '')}></span>`;
   }
 
+  /**
+   * Predict → reveal. Renders `options` ([{ value, label }]) as a choice of guesses; the
+   * Reveal button is disabled until one is picked. The correct answer (`props.correct`)
+   * is never read until after reveal, so it cannot show up in the DOM beforehand — not
+   * just hidden with CSS. After reveal, shows whether the guess matched and the content
+   * from `props.render(correct)` (a vnode, or a plain string/number).
+   * Resets to "no guess, not revealed" whenever `props.resetKey` changes (e.g. pass a new
+   * key when the student moves on to a new question, a new random case, …).
+   */
+  function PredictReveal(props) {
+    var st = useState({ guess: null, revealed: false }), s = st[0], setS = st[1];
+    useEffect(function () { setS({ guess: null, revealed: false }); }, [props.resetKey]);
+    var correct = s.revealed ? props.correct : null;
+    var right = s.revealed && s.guess === props.correct;
+    return html`<div class="predict-reveal">
+      ${props.prompt && html`<p class="predict-prompt">${props.prompt}</p>`}
+      <div class="seg" role="group" aria-label=${props.prompt || props.label || 'Predict'}>
+        ${props.options.map(function (o) {
+          return html`<button type="button" class="seg-btn" aria-pressed=${String(s.guess === o.value)}
+            disabled=${s.revealed} onClick=${function () { setS({ guess: o.value, revealed: false }); }}>${o.label}</button>`;
+        })}
+      </div>
+      <div class="row">
+        <${Btn} primary disabled=${s.guess == null || s.revealed}
+          onClick=${function () { setS(function (o) { return Object.assign({}, o, { revealed: true }); }); if (props.onReveal) props.onReveal(); }}>Reveal<//>
+        ${s.revealed && html`<${Btn} onClick=${function () { setS({ guess: null, revealed: false }); }}>Try another<//>`}
+      </div>
+      ${s.revealed && html`<p class=${'predict-result ' + (right ? 'ok' : 'warn')}>
+        ${right ? 'Correct. ' : 'Not quite. '}${props.render ? props.render(correct) : String(correct)}
+      </p>`}
+    </div>`;
+  }
+
   /** Observable Plot chart. props.make(Plot, width) returns Plot options; re-rendered when deps change. */
   function Chart(props) {
     var ref = useRef(null);
@@ -120,5 +153,5 @@
   }
 
   SV.ui = { html: html, useMerge: useMerge, useId: useId, Seg: Seg, Check: Check, Btn: Btn, Slider: Slider,
-    MatrixEditor: MatrixEditor, Panel: Panel, KV: KV, Tex: Tex, Chart: Chart };
+    MatrixEditor: MatrixEditor, Panel: Panel, KV: KV, Tex: Tex, Chart: Chart, PredictReveal: PredictReveal };
 })(window);

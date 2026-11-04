@@ -84,7 +84,13 @@
                 "title": "Range, nullspace and solvability of Ax = b",
                 "refs": "Def 1.1.1 · Lem 1.1.1–1.1.2",
                 "interaction": "matrix editor · linked dual panels",
-                "status": "placeholder"
+                "status": "ready",
+                "module": "js/viz/solvability.js",
+                "source": "Lecture 1 · Def 1.1.1 · Lem 1.1.1–1.1.2 · (1.7)",
+                "purpose_html": "Existence of a solution to A<b>x</b> = <b>b</b> is equivalent to <b>b</b> &isin; R(A), and uniqueness is equivalent to N(A) = {<b>0</b>} (Lem 1.1.1). Every solution is one particular solution x<sub>p</sub> plus anything in N(A) (Lem 1.1.2), so the solution set is a shifted copy of N(A). Combining the two gives the unique / infinitely many / no solution trichotomy of (1.7).",
+                "needs": [
+                  "katex"
+                ]
               },
               {
                 "id": "1.3",

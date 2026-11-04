@@ -42,7 +42,7 @@ def first_relation(Q):
     return None
 
 
-cases = {"symEig": [], "norm2": [], "rank": []}
+cases = {"symEig": [], "norm2": [], "rank": [], "gaussianSolve": [], "projectOntoBasis": [], "solvability": []}
 
 # symmetric eigenvalues, n = 2…4
 for _ in range(40):
@@ -90,6 +90,68 @@ for scale, label in [(1e-13, "perturbed 1e-13 (dependent)"), (1e-7, "perturbed 1
         add_rank_case(Q, label)
 add_rank_case(np.zeros((2, 1)), "zero vector")
 add_rank_case(np.array([[1.0, 0, 0], [0, 0, 1], [0, 0, 0]]), "zero column in the middle")
+
+# gaussianSolve: random invertible k×k systems vs numpy.linalg.solve (1.2's math/linalg.js)
+for _ in range(30):
+    k = int(rng.integers(1, 5))
+    M = rng.normal(size=(k, k))
+    if abs(np.linalg.det(M)) < 1e-6:
+        continue
+    b = rng.normal(size=k)
+    x = np.linalg.solve(M, b)
+    cases["gaussianSolve"].append({"M": M.tolist(), "b": b.tolist(), "x": x.tolist()})
+
+# projectOntoBasis: v projected onto a random orthonormal partial basis (possibly empty/full)
+for _ in range(30):
+    n = int(rng.integers(2, 4))
+    k = int(rng.integers(0, n + 1))
+    if k == 0:
+        E = np.zeros((n, 0))
+    else:
+        Q, _ = np.linalg.qr(rng.normal(size=(n, k)))
+        E = Q[:, :k]
+    v = rng.normal(size=n)
+    coeffs = (E.T @ v) if k else np.zeros(0)
+    proj = (E @ coeffs) if k else np.zeros(n)
+    residual = float(np.linalg.norm(v - proj))
+    cases["projectOntoBasis"].append({
+        "E": [E[:, j].tolist() for j in range(k)], "v": v.tolist(),
+        "coeffs": coeffs.tolist(), "proj": proj.tolist(), "residual": residual,
+    })
+
+# Solvability of Ax = b (1.2): rank, nullity and the minimum-norm solution (via SVD,
+# truncated at the same tol as analyse()'s rank decision) for a consistent system.
+# Ranks are mostly full here (random matrices), with some rows made exactly dependent so
+# N(A) is non-trivial, matching the "infinitely many solutions" case the UI must show.
+def add_solvability_case(A, label):
+    m, n = A.shape
+    tol = tol_for(A)
+    rank = int(np.linalg.matrix_rank(A, tol=tol))
+    x_true = rng.integers(-4, 5, size=n) / 2.0
+    b = A @ x_true
+    U, S, Vt = np.linalg.svd(A, full_matrices=False)
+    keep = S > tol
+    S_inv = np.zeros_like(S)
+    S_inv[keep] = 1.0 / S[keep]
+    x_min = (Vt.T * S_inv) @ (U.T @ b)
+    cases["solvability"].append({
+        "label": label, "rows": A.tolist(), "b": b.tolist(), "tol": tol,
+        "rank": rank, "nullity": n - rank, "minNormX": x_min.tolist(),
+    })
+
+
+for _ in range(25):
+    m, n = int(rng.integers(1, 4)), int(rng.integers(1, 4))
+    add_solvability_case(rng.integers(-4, 5, size=(m, n)) / 2.0, "random (usually full rank)")
+for _ in range(20):
+    m, n = int(rng.integers(2, 4)), int(rng.integers(2, 4))
+    A = rng.integers(-4, 5, size=(m, n)) / 2.0
+    j = int(rng.integers(1, n))
+    c = rng.choice([-1.5, -1, -0.5, 0.5, 1, 1.5], size=j)
+    A[:, j] = A[:, :j] @ c  # exact column dependence -> non-trivial N(A)
+    add_solvability_case(A, "rank-deficient (non-trivial N(A))")
+add_solvability_case(np.zeros((3, 2)), "zero matrix")
+add_solvability_case(np.eye(3), "identity")
 
 out = Path(__file__).with_name("fixtures.json")
 out.write_text(json.dumps({"generator": "numpy " + np.__version__, "seed": 20261104, **cases}, indent=1))

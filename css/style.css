@@ -10,6 +10,7 @@
   --text: #1C1C1A;
   --text-2: #3D3D3A;
   --muted: #5F5F5A;
+  --muted-weak: #ECECE9;
   --accent: #0B6467;
   --accent-strong: #073F41;
   --accent-weak: #E1EEEE;
@@ -31,7 +32,7 @@
   :root:not([data-theme="light"]) {
     color-scheme: dark;
     --bg: #151716; --surface: #1D201F; --surface-2: #1A1C1B; --line: #363A38; --line-soft: #2A2D2C;
-    --text: #E9E9E4; --text-2: #CFCFC9; --muted: #A4A49D;
+    --text: #E9E9E4; --text-2: #CFCFC9; --muted: #A4A49D; --muted-weak: #2B2E2D;
     --accent: #5BBDB9; --accent-strong: #9BDCD8; --accent-weak: #1E3B3A; --on-accent: #0D1A1A;
     --warn: #E3A066; --warn-weak: #2B221A;
     --grid-minor: #222524; --grid-major: #2F3331; --axis: #7D817E;
@@ -41,7 +42,7 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
   --bg: #151716; --surface: #1D201F; --surface-2: #1A1C1B; --line: #363A38; --line-soft: #2A2D2C;
-  --text: #E9E9E4; --text-2: #CFCFC9; --muted: #A4A49D;
+  --text: #E9E9E4; --text-2: #CFCFC9; --muted: #A4A49D; --muted-weak: #2B2E2D;
   --accent: #5BBDB9; --accent-strong: #9BDCD8; --accent-weak: #1E3B3A; --on-accent: #0D1A1A;
   --warn: #E3A066; --warn-weak: #2B221A;
   --grid-minor: #222524; --grid-major: #2F3331; --axis: #7D817E;
@@ -214,6 +215,9 @@ dialog .kv { margin: 14px 0 18px; }
 .viz-body { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
 .viz-figure { flex: 3 1 440px; min-width: 0; max-width: 660px; margin: 0; display: flex; flex-direction: column; gap: 8px; }
 .viz-side { flex: 2 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+/* two linked panels side by side (e.g. input/output space) instead of a single viz-figure */
+.viz-figures { flex: 3 1 600px; min-width: 0; display: flex; flex-wrap: wrap; gap: 16px; }
+.viz-figures .viz-figure { flex: 1 1 280px; max-width: 420px; }
 .figure-box { position: relative; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg); overflow: hidden; }
 .span-caption { position: absolute; left: 12px; top: 10px; padding: 2px 8px; border-radius: 4px; background: var(--bg); font-size: 13px; font-weight: 500; color: var(--accent-strong); }
 /* stages (toolkit/stage2d.js, toolkit/stage3d.js) */
@@ -264,6 +268,12 @@ dialog .kv { margin: 14px 0 18px; }
 .verdict.warn { color: var(--warn); }
 .verdict.warn::before { border: 2px solid var(--warn); }
 .rel { font-size: 15px; }
+/* predict → reveal (ui.PredictReveal): guess buttons, then a Reveal button, then the answer */
+.predict-reveal { display: flex; flex-direction: column; gap: 10px; }
+.predict-prompt { font-size: 14px; }
+.predict-result { font-size: 14px; padding: 8px 10px; border-radius: 6px; background: var(--surface); }
+.predict-result.ok { color: var(--accent); }
+.predict-result.warn { color: var(--warn); }
 .slider-row { display: grid; grid-template-columns: 32px minmax(0, 1fr) 48px; align-items: center; gap: 10px; }
 .slider-row output { text-align: right; font-size: 13px; }
 .slider-row input { width: 100%; accent-color: var(--accent); }

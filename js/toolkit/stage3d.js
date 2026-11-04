@@ -89,8 +89,8 @@
       group.add(lines(bp, lineMat(c(sc.box === true ? 'accent' : sc.box), 0.45)));
     }
     (sc.planes || []).forEach(function (pl) {
-      var a = SV.stage.pad3(pl.basis[0]), b = SV.stage.pad3(pl.basis[1]), h = pl.half || 3.6;
-      var corner = function (s1, s2) { return [0, 1, 2].map(function (l) { return h * (s1 * a[l] + s2 * b[l]); }); };
+      var a = SV.stage.pad3(pl.basis[0]), b = SV.stage.pad3(pl.basis[1]), h = pl.half || 3.6, at = SV.stage.pad3(pl.at || [0, 0, 0]);
+      var corner = function (s1, s2) { return [0, 1, 2].map(function (l) { return at[l] + h * (s1 * a[l] + s2 * b[l]); }); };
       var q = [corner(1, 1), corner(1, -1), corner(-1, -1), corner(-1, 1)];
       var geo = new T.BufferGeometry();
       geo.setAttribute('position', new T.Float32BufferAttribute([].concat(q[0], q[1], q[2], q[0], q[2], q[3]), 3));
@@ -100,7 +100,8 @@
       group.add(lines([[q[0], q[1]], [q[1], q[2]], [q[2], q[3]], [q[3], q[0]]], lineMat(c(pl.color || 'accent'), 0.5)));
     });
     (sc.lines || []).forEach(function (l) {
-      var d = SV.stage.pad3(l.dir), L = ext * 3, A = d.map(function (x) { return -L * x; }), B = d.map(function (x) { return L * x; });
+      var d = SV.stage.pad3(l.dir), L = ext * 3, at = SV.stage.pad3(l.at || [0, 0, 0]);
+      var A = at.map(function (x, i) { return x - L * d[i]; }), B = at.map(function (x, i) { return x + L * d[i]; });
       group.add(rod(A, B, 0.015, new T.MeshBasicMaterial({ color: c(l.color || 'accent'), transparent: true, opacity: 0.8 })));
       if (l.band !== false) {
         var band = rod(A, B, 0.1, new T.MeshBasicMaterial({ color: c(l.color || 'accent'), transparent: true, opacity: 0.16, depthWrite: false }));
@@ -237,6 +238,10 @@
       var p = screen(a.to);
       return p && html`<span class="ov-label arrow-label-3d" style=${'left:' + (p.x + 14) + 'px;top:' + (p.y + 14) + 'px;color:var(--' + (a.labelColor || a.color) + ')'}>${a.label}</span>`;
     });
+    var dotLabels = (sc.dots || []).filter(function (d) { return d.label; }).map(function (d) {
+      var p = screen(d.labelAt || d.at);
+      return p && html`<span class="ov-label arrow-label-3d" style=${'left:' + (p.x + 10) + 'px;top:' + (p.y - 6) + 'px;color:var(--' + (d.labelColor || d.color) + ')'}>${d.label}</span>`;
+    });
     var handles = (sc.points || []).map(function (pt) {
       var p = screen(pt.at);
       return p && html`<span class="ov-point" style=${'left:' + p.x + 'px;top:' + p.y + 'px'}>
@@ -252,7 +257,7 @@
     return html`<div ref=${hostRef} class="stage stage3d orbit" role="img" aria-label=${sc.aria || null}>
       <canvas ref=${canvasRef} onPointerDown=${startOrbit} onPointerMove=${move} onPointerUp=${end} onPointerCancel=${end}></canvas>
       ${status === 'loading' && html`<p class="muted small stage-loading">Loading 3D view…</p>`}
-      <div class="overlay" aria-hidden="false">${axisLabels}${arrowLabels}${handles}</div>
+      <div class="overlay" aria-hidden="false">${axisLabels}${arrowLabels}${dotLabels}${handles}</div>
     </div>`;
   }
 

@@ -167,7 +167,192 @@
     return m + ' \\cdot 10^{' + e + '}';
   }
 
-  const api = { TOL_FACTOR, dot, norm, jacobiEig, norm2, analyse, fmt, fmtE, sub, relationText, relationTex, fmtTex, fmtETex };
+  /** A·x for A given as an array of rows (each length n); x has length n. Returns a vector of length rows.length. */
+  function applyRows(rows, x) {
+    return rows.map((r) => dot(r, x));
+  }
+
+  /**
+   * Orthogonal projection of v onto span(E) for an orthonormal set E (e.g. the `.E` from
+   * analyse()). Returns the coefficients ⟨v, eᵢ⟩, the projected vector, and the residual
+   * norm ‖v − proj‖₂ (0 when E is empty and v is the zero vector; ‖v‖₂ when E is empty).
+   */
+  function projectOntoBasis(E, v) {
+    const proj = v.map(() => 0);
+    const coeffs = E.map((e) => {
+      const c = dot(e, v);
+      for (let l = 0; l < v.length; l++) proj[l] += c * e[l];
+      return c;
+    });
+    const residual = norm(v.map((x, l) => x - proj[l]));
+    return { coeffs, proj, residual };
+  }
+
+  /**
+   * Extends an orthonormal set `basis` (vectors of length `dim`) to a full orthonormal
+   * basis of ℝ^dim by Gram–Schmidt against the standard basis e₁…e_dim, and returns only
+   * the newly added vectors (so N(A) = these vectors when `basis` spans N(A)^⊥ = the row
+   * space of A). `tol` should come from the same analyse() call that produced `basis`
+   * (e.g. tol = 1e-10·max(1, ‖A‖₂)) so one tolerance decides both the rank and the
+   * completion — this function does not compute its own.
+   */
+  function completeOrthonormalBasis(basis, dim, tol) {
+    const E = basis.map((v) => v.slice());
+    const added = [];
+    for (let i = 0; i < dim && E.length < dim; i++) {
+      const e = new Array(dim).fill(0);
+      e[i] = 1;
+      const r = e.slice();
+      for (let pass = 0; pass < 2; pass++) {
+        for (const u of E) {
+          const c = dot(u, r);
+          for (let l = 0; l < dim; l++) r[l] -= c * u[l];
+        }
+      }
+      const rn = norm(r);
+      if (rn > tol) {
+        const u = r.map((x) => x / rn);
+        E.push(u);
+        added.push(u);
+      }
+    }
+    return added;
+  }
+
+  /**
+   * Solves the square system M x = b (M an array of rows, b a matching array) by Gaussian
+   * elimination with partial pivoting. Returns null if M is singular at the scale of its
+   * own entries (no second global tolerance: the pivot is compared with the matrix's own
+   * magnitude). Used for small (n ≤ 3) systems; a stable general method, as the project
+   * conventions ask for when a 2×2 closed form would just special-case this anyway.
+   */
+  function gaussianSolve(M, b) {
+    const n = M.length;
+    const A = M.map((r) => r.slice());
+    const y = b.slice();
+    let scale = 0;
+    for (const r of A) for (const x of r) scale = Math.max(scale, Math.abs(x));
+    const pivTol = 1e-12 * Math.max(1, scale);
+    for (let col = 0; col < n; col++) {
+      let piv = col;
+      for (let row = col + 1; row < n; row++) if (Math.abs(A[row][col]) > Math.abs(A[piv][col])) piv = row;
+      if (Math.abs(A[piv][col]) < pivTol) return null;
+      if (piv !== col) { [A[piv], A[col]] = [A[col], A[piv]]; [y[piv], y[col]] = [y[col], y[piv]]; }
+      for (let row = col + 1; row < n; row++) {
+        const f = A[row][col] / A[col][col];
+        if (f === 0) continue;
+        for (let c = col; c < n; c++) A[row][c] -= f * A[col][c];
+        y[row] -= f * y[col];
+      }
+    }
+    const x = new Array(n);
+    for (let i = n - 1; i >= 0; i--) {
+      let s = y[i];
+      for (let j = i + 1; j < n; j++) s -= A[i][j] * x[j];
+      x[i] = s / A[i][i];
+    }
+    return x;
+  }
+
+  /**
+   * Minimum-norm solution x of A x = b (A given by its rows, m × n), assuming the system
+   * is consistent (b ∈ R(A) — callers decide that separately, e.g. with analyse() on the
+   * columns of A and projectOntoBasis). The minimum-norm solution always lies in
+   * N(A)^⊥ = row(A): writing x = Σ cᵢrᵢ over the orthonormal row-space basis rᵢ from
+   * analyse(rows), A x = (A R) c where R's columns are the rᵢ; A R has full column rank
+   * (A restricted to N(A)^⊥ is injective, Lemma 1.1.1), so c solves the small normal
+   * equations (A R)ᵗ(A R) c = (A R)ᵗ b. Valid for rank-deficient A (then rows may not be
+   * independent; analyse() still returns an orthonormal basis of their span).
+   */
+  function minNormSolve(rows, b) {
+    const n = rows.length ? rows[0].length : 0;
+    const rowBasis = analyse(rows).E;
+    if (!rowBasis.length) return new Array(n).fill(0);
+    const cols = rowBasis.map((v) => applyRows(rows, v));
+    const k = cols.length;
+    const G = cols.map((ci) => cols.map((cj) => dot(ci, cj)));
+    const rhs = cols.map((ci) => dot(ci, b));
+    const c = gaussianSolve(G, rhs) || new Array(k).fill(0);
+    const x = new Array(n).fill(0);
+    for (let i = 0; i < k; i++) for (let l = 0; l < n; l++) x[l] += c[i] * rowBasis[i][l];
+    return x;
+  }
+
+  /** Integer gcd (always ≥ 1; gcd(0, 0) = 1 so callers never divide by 0). */
+  function gcdInt(a, b) {
+    a = Math.abs(Math.round(a));
+    b = Math.abs(Math.round(b));
+    while (b) { const t = b; b = a % b; a = t; }
+    return a || 1;
+  }
+
+  /** Integer lcm, via gcd. */
+  function lcmInt(a, b) {
+    return Math.abs(a * b) / gcdInt(a, b);
+  }
+
+  /**
+   * Rescales a direction vector to the smallest integer vector that points along the same
+   * line, for display next to the notes (e.g. a nullspace basis vector that `analyse()`
+   * returns as a unit vector such as [0.577, 0.577, −0.577] is really span[1, 1, −1], the
+   * same line as the notes' [−1, −1, 1]). A basis vector and any non-zero multiple of it
+   * span the same subspace, so this is a display convention, not a different mathematical
+   * object — the sign is normalised so the first non-zero entry of the result is positive.
+   *
+   * Tries, for every component relative to the largest-magnitude one, a rational
+   * approximation p/q with q ≤ maxDenom; if every component matches within `tol` (relative
+   * to q), the vector is rescaled to the resulting small integer vector (reduced by its
+   * gcd) and `exact: true` is returned. Otherwise (no small-denominator match, e.g. an
+   * irrational direction) the input vector is returned unchanged with `exact: false`, so
+   * callers can fall back to showing the plain unit vector.
+   *
+   * This has no single "correct" numeric answer to check against NumPy (any non-zero
+   * multiple is equally valid), so it is covered by hand-written tests instead of a
+   * NumPy-fixture comparison.
+   *
+   * @param {number[]} v
+   * @param {number} [maxDenom=12]
+   * @param {number} [tol=1e-4]
+   * @returns {{ v: number[], exact: boolean }}
+   */
+  function niceBasis(v, maxDenom, tol) {
+    maxDenom = maxDenom || 12;
+    tol = tol == null ? 1e-4 : tol;
+    const n = v.length;
+    if (v.every((x) => Math.abs(x) < 1e-12)) return { v: v.slice(), exact: true };
+    let p = 0;
+    for (let i = 1; i < n; i++) if (Math.abs(v[i]) > Math.abs(v[p])) p = i;
+    let denom = 1;
+    for (let i = 0; i < n; i++) {
+      if (i === p) continue;
+      const r = v[i] / v[p];
+      let best = null;
+      for (let q = 1; q <= maxDenom; q++) {
+        const num = r * q;
+        if (Math.abs(num - Math.round(num)) < tol * q) { best = q; break; }
+      }
+      if (best == null) return { v: v.slice(), exact: false };
+      denom = lcmInt(denom, best);
+      if (denom > 10000) return { v: v.slice(), exact: false }; // guard against a degenerate blow-up
+    }
+    const ints = v.map((x) => Math.round((x / v[p]) * denom));
+    let g = Math.abs(ints[0]) || 1;
+    for (let i = 1; i < n; i++) g = gcdInt(g, ints[i]);
+    let out = ints.map((x) => x / g);
+    // direction check: the rescaled integer vector must still point along v (or exactly against it)
+    const nOut = norm(out), nV = norm(v);
+    if (nOut === 0 || nV === 0) return { v: v.slice(), exact: false };
+    const cosLike = dot(out, v) / (nOut * nV);
+    if (Math.abs(cosLike - 1) > 1e-6 && Math.abs(cosLike + 1) > 1e-6) return { v: v.slice(), exact: false };
+    const firstNz = out.find((x) => x !== 0) || 0;
+    if (firstNz < 0) out = out.map((x) => -x);
+    return { v: out, exact: true };
+  }
+
+  const api = {
+    TOL_FACTOR, dot, norm, jacobiEig, norm2, analyse, fmt, fmtE, sub, relationText, relationTex, fmtTex, fmtETex,
+    applyRows, projectOntoBasis, completeOrthonormalBasis, gaussianSolve, minNormSolve, niceBasis,
+  };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.SV = root.SV || {};
   root.SV.linalg = api;
