@@ -1,0 +1,10 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "num_turns": 14,
+  "total_cost_usd": 0.31,
+  "session_id": "00000000-0000-0000-0000-000000000001",
+  "permission_denials": [],
+  "result": "Review of 1.3: the model is right but the default state is off-axis and one Fixed-by-system item is missing.\n\n- Tests: npm test 390/0, smoke passes.\n\nminor: slider label could be shorter.\n\n**VERDICT: FAIL**\n1. js/viz/dimension-split.js: default z = (3.5, 0) is outside [−3, 3]; use (1.5, 0.5).\n2. js/viz/dimension-split.js: add tol = 1e-10·max(1, ‖A‖₂) to the Fixed by system panel.\n   It is currently computed but not shown."
+}

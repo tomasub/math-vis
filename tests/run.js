@@ -3,6 +3,7 @@
 // 2. hand-written edge cases
 // 3. manifest consistency
 // 4. every tests/viz/*.test.js (one file per visualisation's model)
+// 5. every tests/scripts/*.test.js (build tooling, e.g. the reviewer-verdict parser)
 'use strict';
 const path = require('node:path');
 const fs = require('node:fs');
@@ -198,6 +199,12 @@ test('manifest is consistent', () => {
 for (const f of fs.readdirSync(path.join(__dirname, 'viz')).filter((x) => x.endsWith('.test.js')).sort()) {
   state.file = 'viz/' + f;
   require(path.join(__dirname, 'viz', f));
+}
+
+/* ---------- 5. build scripts ---------- */
+for (const f of fs.readdirSync(path.join(__dirname, 'scripts')).filter((x) => x.endsWith('.test.js')).sort()) {
+  state.file = 'scripts/' + f;
+  require(path.join(__dirname, 'scripts', f));
 }
 
 console.log(`${state.passed} passed, ${state.failed} failed`);

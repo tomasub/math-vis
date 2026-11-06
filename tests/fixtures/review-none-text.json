@@ -1,0 +1,10 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "num_turns": 9,
+  "total_cost_usd": 0.22,
+  "session_id": "00000000-0000-0000-0000-000000000002",
+  "permission_denials": [],
+  "result": "I looked at the toolkit additions. Most of it looks reasonable, though I would want to double-check the gallery in dark mode before signing off."
+}
