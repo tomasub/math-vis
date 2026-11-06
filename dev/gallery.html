@@ -39,6 +39,8 @@
     var sceneAffine3 = { dim: 3, drops: true,
       planes: [{ basis: [[1, 0, 0], [0, 1, 0]], color: 'muted' }, { basis: [[1, 0, 0], [0, 1, 0]], at: [0, 0, 1.4], color: 'accent' }],
       dots: [{ at: [0, 0, 1.4], color: 'accent', r: 5, label: 'xₚ' }] };
+    var sceneGrid = { dim: 3, planes: [{ basis: [[1, 0, 2], [0, 1, 0]], color: 'q1', half: 2, grid: { range: 2, step: 1 } },
+      { basis: [[1, 1, 2], [0, -1, 0]], color: 'q2', half: 2, fill: false, grid: { range: 2, step: 1, color: 'q2' } }] };
     var sceneLabelAt = { dim: 2, step: 0.5,
       arrows: [{ from: [0, 0, 0], to: [1.6, 1.1, 0], color: 'q3', label: 'Ax', labelColor: 'q3' }],
       dots: [{ at: [1.6, 1.1, 0], color: 'warn', r: 5, label: 'proj(b)', labelColor: 'warn', labelAt: [2.2, 1.51, 0] }] };
@@ -89,6 +91,13 @@
         <div class="demo"><h2>Dot label offset (labelAt)</h2>
           <div class="figure-box"><${SV.stage.Stage} scene=${sceneLabelAt} /></div>
           <code>dots: [{ at, labelAt }] — label moved off the arrowhead it would otherwise overlap</code></div>
+        <div class="demo"><h2>Plane coordinate grid (3D, non-orthogonal basis)</h2>
+          <div class="figure-box"><${SV.stage.Stage} scene=${sceneGrid} /></div>
+          <code>planes: [{ grid, fill:false }]</code></div>
+        <div class="demo"><h2>SplitBar · Player</h2>
+          <${ui.SplitBar} total=${3} parts=${[{ label: 'dim R(A)', value: 2, color: 'q1' }, { label: 'dim N(A)', value: 1, color: 'q2' }]} />
+          <${ui.Player} value=${s.t || 0} onChange=${function (t) { set({ t: t }); }} />
+          <code>ui.SplitBar · ui.Player</code></div>
         <div class="demo"><h2>PredictReveal</h2>
           <${ui.PredictReveal} prompt="How many solutions does Ax = b have?"
             options=${[{ value: 0, label: '0' }, { value: 1, label: '1' }, { value: 'inf', label: '∞' }]}

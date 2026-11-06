@@ -97,7 +97,14 @@
                 "title": "One subspace, two bases",
                 "refs": "Ex 1.1.1 · Defs 1.1.3–1.1.4",
                 "interaction": "3D · drag on plane",
-                "status": "placeholder"
+                "status": "placeholder",
+                "module": "js/viz/two-bases.js",
+                "source": "Lecture 1 · Ex 1.1.1 · Defs 1.1.3–1.1.4",
+                "purpose_html": "A subspace has infinitely many bases, but the coordinates of a vector in a given basis are unique, and every basis of R(A) has the same number of vectors (Defs 1.1.3–1.1.4). The coordinate vector <b>z</b> (column basis of A) and <b>x</b> (basis w<sub>1</sub>, w<sub>2</sub>) describe the same <b>y</b> &isin; R(A).",
+                "needs": [
+                  "katex",
+                  "three"
+                ]
               }
             ]
           },
@@ -111,7 +118,14 @@
                 "title": "Dimension theorem as a split of the input space",
                 "refs": "Thm 1.1.1",
                 "interaction": "animation · rank slider",
-                "status": "placeholder"
+                "status": "placeholder",
+                "module": "js/viz/dimension-split.js",
+                "source": "Lecture 2 · Thm 1.1.1",
+                "purpose_html": "Splitting R<sup>n</sup> into N(A) and a complement, A collapses N(A) to <b>0</b> and maps the complement one-to-one onto R(A), so dim R(A) + dim N(A) = n (Thm 1.1.1): what is lost to N(A) is exactly what is missing from R(A).",
+                "needs": [
+                  "katex",
+                  "three"
+                ]
               },
               {
                 "id": "2.2",

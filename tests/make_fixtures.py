@@ -153,6 +153,24 @@ for _ in range(20):
 add_solvability_case(np.zeros((3, 2)), "zero matrix")
 add_solvability_case(np.eye(3), "identity")
 
+# 1.3 / 2.1: coordinates in a basis (numpy lstsq) and the split of R^n into N(A) + N(A)^perp
+cases["coordsInBasis"] = []
+for _ in range(25):
+    m = int(rng.integers(2, 4)); k = int(rng.integers(1, m + 1))
+    G = rng.integers(-4, 5, size=(m, k)) / 2.0
+    if np.linalg.matrix_rank(G) < k:
+        continue
+    z = rng.integers(-4, 5, size=k) / 2.0
+    cases["coordsInBasis"].append({"cols": cols(G), "y": (G @ z).tolist(), "z": np.linalg.lstsq(G, G @ z, rcond=None)[0].tolist()})
+cases["splitInput"] = []
+for _ in range(25):
+    m, n = int(rng.integers(1, 4)), int(rng.integers(1, 4))
+    A = rng.integers(-4, 5, size=(m, n)) / 2.0
+    if rng.random() < 0.5 and n > 1:
+        A[:, n - 1] = A[:, 0]
+    r = int(np.linalg.matrix_rank(A, tol=tol_for(A)))
+    cases["splitInput"].append({"rows": A.tolist(), "rank": r, "nullity": n - r})
+
 out = Path(__file__).with_name("fixtures.json")
 out.write_text(json.dumps({"generator": "numpy " + np.__version__, "seed": 20261104, **cases}, indent=1))
 print(f"wrote {out} · {sum(len(v) for v in cases.values())} cases")

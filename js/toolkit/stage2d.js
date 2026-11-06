@@ -12,7 +12,11 @@
      grid: true, axes: true, axisLabels: ['x₁', 'x₂', 'x₃'],
      fillAll: 'accent',          // tint the whole plane (2D)
      box: 'accent',              // wireframe cube ±3 (3D)
-     planes:   [{ basis: [a, b], at, half: 3.6, color }],       // plane through `at` (default origin)
+     planes:   [{ basis: [a, b], at, half: 3.6, color,          // plane through `at` (default origin)
+                  fill: false,                                 // optional: hide the tint (default true)
+                  grid: { range: 3, step: 1, color } }],       // optional coordinate grid: lines at
+                                                               //   at + i·step·a ± range·b and at + i·step·b ± range·a
+                                                               //   (|i·step| ≤ range); a, b need not be orthogonal
      lines:    [{ dir, at, color, band: true }],                // line through `at` (default origin)
      segments: [{ from, to, color, dash: true, width }],
      arrows:   [{ from, to, color, width, label, labelColor }],
@@ -164,7 +168,17 @@
           var q = proj([0, 1, 2].map(function (l) { return at[l] + h * (s[0] * a[l] + s[1] * b[l]); }));
           return r2(q[0]) + ',' + r2(q[1]);
         }).join(' ');
-        return html`<polygon class="plane" points=${pts} style=${'fill:' + col(pl.color || 'accent') + ';stroke:' + col(pl.color || 'accent')}></polygon>`;
+        var gr = pl.grid, gd = '';
+        if (gr) {
+          var R = gr.range || 3, st = gr.step || 1;
+          for (var i = -Math.floor(R / st + 1e-9); i <= Math.floor(R / st + 1e-9); i++) {
+            var o1 = at.map(function (x, l) { return x + i * st * a[l]; }), o2 = at.map(function (x, l) { return x + i * st * b[l]; });
+            gd += seg(o1.map(function (x, l) { return x - R * b[l]; }), o1.map(function (x, l) { return x + R * b[l]; }));
+            gd += seg(o2.map(function (x, l) { return x - R * a[l]; }), o2.map(function (x, l) { return x + R * a[l]; }));
+          }
+        }
+        return html`<g>${pl.fill !== false && html`<polygon class="plane" points=${pts} style=${'fill:' + col(pl.color || 'accent') + ';stroke:' + col(pl.color || 'accent')}></polygon>`}
+          ${gr && html`<path d=${gd} style=${'fill:none;stroke-width:1.2;opacity:0.75;stroke:' + col(gr.color || pl.color || 'accent')}></path>`}</g>`;
       })}
       ${(sc.lines || []).map(function (l) {
         var d3 = pad3(l.dir), L = ext * 4, at = pad3(l.at || [0, 0, 0]);
