@@ -56,6 +56,26 @@ fx.solvability.forEach((c, i) => test(`solvability #${i} (${c.label}): rank, nul
   xMin.forEach((v, j) => near(v, c.minNormX[j], 1e-6, 1e-7));
 }));
 
+fx.coordsInBasis.forEach((c, i) => test(`coordsInBasis #${i} vs numpy lstsq`, () => {
+  const r = L.coordsInBasis(c.cols, c.y);
+  assert.ok(r.independent && r.inSpan);
+  r.z.forEach((v, j) => near(v, c.z[j], 1e-8, 1e-8));
+}));
+fx.splitInput.forEach((c, i) => test(`splitInputSpace #${i}: rank + nullity = n, vs numpy rank`, () => {
+  const s = L.splitInputSpace(c.rows);
+  assert.equal(s.rank, c.rank); assert.equal(s.nullity, c.nullity);
+  assert.equal(s.C.length + s.N.length, c.rows[0].length);
+  s.N.forEach((v) => near(L.norm(L.applyRows(c.rows, v)), 0, 0, 1e-8));
+}));
+test('coordsInBasis: dependent basis / off-plane point', () => {
+  assert.equal(L.coordsInBasis([[1, 0], [2, 0]], [1, 0]).independent, false);
+  const r = L.coordsInBasis([[1, 0, 0], [0, 1, 0]], [0, 0, 1]);
+  assert.equal(r.inSpan, false); near(r.residual, 1, 1e-12);
+});
+test('randomRankMatrix has the requested rank', () => {
+  for (const r of [0, 1, 2]) { const A = L.randomRankMatrix(3, 2, r); assert.equal(L.splitInputSpace(A).rank, r); }
+});
+
 /* ---------- 2. edge cases and formatting ---------- */
 test('k > n forces dependence', () => assert.equal(L.relationText(L.analyse([[1, 0], [0, 1], [2, -1]]).rel), 'q₃ = 2q₁ − q₂'));
 test('zero vector', () => assert.equal(L.relationText(L.analyse([[0, 0]]).rel), 'q₁ = 0'));

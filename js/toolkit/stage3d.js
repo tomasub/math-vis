@@ -94,6 +94,16 @@
       var q = [corner(1, 1), corner(1, -1), corner(-1, -1), corner(-1, 1)];
       var geo = new T.BufferGeometry();
       geo.setAttribute('position', new T.Float32BufferAttribute([].concat(q[0], q[1], q[2], q[0], q[2], q[3]), 3));
+      if (pl.grid) {
+        var R = pl.grid.range || 3, st = pl.grid.step || 1, gl = [], n = Math.floor(R / st + 1e-9);
+        var comb = function (o, d, t) { return [0, 1, 2].map(function (l) { return o[l] + t * d[l]; }); };
+        for (var i = -n; i <= n; i++) {
+          var o1 = comb(at, a, i * st), o2 = comb(at, b, i * st);
+          gl.push([comb(o1, b, -R), comb(o1, b, R)], [comb(o2, a, -R), comb(o2, a, R)]);
+        }
+        group.add(lines(gl, lineMat(c(pl.grid.color || pl.color || 'accent'), 0.8)));
+      }
+      if (pl.fill === false) return;
       var mesh = new T.Mesh(geo, new T.MeshBasicMaterial({ color: c(pl.color || 'accent'), transparent: true, opacity: 0.16, side: T.DoubleSide, depthWrite: false }));
       mesh.renderOrder = 2;
       group.add(mesh);

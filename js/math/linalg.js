@@ -349,9 +349,58 @@
     return { v: out, exact: true };
   }
 
+  /**
+   * Coordinates of y in the basis given by `cols` (array of columns, independent): solves
+   * the m×k system [cols] z = y exactly when y lies in the span. Uses the orthonormal basis
+   * from analyse() only to test membership and the small normal equations (GᵗG z = Gᵗy,
+   * G has full column rank so GᵗG is invertible) to get z. Returns
+   * { z, residual, inSpan, independent }: z = null if the columns are dependent;
+   * `residual` = ‖y − Gz‖₂ and inSpan = residual ≤ tol (tol from analyse(cols)).
+   */
+  function coordsInBasis(cols, y) {
+    const an = analyse(cols);
+    if (an.rank < cols.length) return { z: null, residual: null, inSpan: false, independent: false };
+    const G = cols.map((ci) => cols.map((cj) => dot(ci, cj)));
+    const z = gaussianSolve(G, cols.map((ci) => dot(ci, y)));
+    if (!z) return { z: null, residual: null, inSpan: false, independent: false };
+    const res = norm(y.map((v, l) => v - cols.reduce((s, c, j) => s + z[j] * c[l], 0)));
+    return { z, residual: res, inSpan: res <= an.tol * Math.max(1, norm(y)), independent: true };
+  }
+
+  /**
+   * Splits the input space ℝⁿ for A (array of rows, m×n) as in the proof of Thm 1.1.1:
+   * { rank, nullity, tol, N: orthonormal basis of N(A), C: orthonormal basis of N(A)^⊥ = row
+   * space (a valid complement) }. rank + nullity = n always.
+   */
+  function splitInputSpace(rows) {
+    const n = rows.length ? rows[0].length : 0;
+    const cols = []; for (let j = 0; j < n; j++) cols.push(rows.map((r) => r[j]));
+    const colAn = analyse(cols), rowAn = analyse(rows);
+    const C = rowAn.E.slice(0, colAn.rank);
+    const N = completeOrthonormalBasis(C, n, colAn.tol);
+    return { rank: colAn.rank, nullity: N.length, tol: colAn.tol, N, C };
+  }
+
+  /**
+   * Random m×n matrix (array of rows) of exact rank r (0 ≤ r ≤ min(m,n)): B C with B m×r and
+   * C r×n having entries from `rand()` (default: uniform in [−2, 2] rounded to 0.5 steps, kept
+   * away from rank loss by retrying until analyse() confirms rank r, at most 50 tries).
+   */
+  function randomRankMatrix(m, n, r, rand) {
+    const rnd = rand || (() => Math.round((Math.random() * 4 - 2) * 2) / 2);
+    for (let t = 0; t < 50; t++) {
+      const B = Array.from({ length: m }, () => Array.from({ length: r }, rnd));
+      const C = Array.from({ length: r }, () => Array.from({ length: n }, rnd));
+      const A = B.map((br) => Array.from({ length: n }, (_, j) => br.reduce((s, v, k) => s + v * C[k][j], 0)));
+      const cols = []; for (let j = 0; j < n; j++) cols.push(A.map((row) => row[j]));
+      if (analyse(cols).rank === r) return A;
+    }
+    return null;
+  }
+
   const api = {
     TOL_FACTOR, dot, norm, jacobiEig, norm2, analyse, fmt, fmtE, sub, relationText, relationTex, fmtTex, fmtETex,
-    applyRows, projectOntoBasis, completeOrthonormalBasis, gaussianSolve, minNormSolve, niceBasis,
+    applyRows, coordsInBasis, splitInputSpace, randomRankMatrix, projectOntoBasis, completeOrthonormalBasis, gaussianSolve, minNormSolve, niceBasis,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.SV = root.SV || {};

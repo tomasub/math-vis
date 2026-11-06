@@ -152,6 +152,43 @@
     return html`<figure class="chart" ref=${ref} aria-label=${props.aria || null} role=${props.aria ? 'img' : null}></figure>`;
   }
 
+  /** Stacked bar of fixed total length: props.parts = [{ label, value, color }], props.total. Widths ∝ value/total. */
+  function SplitBar(props) {
+    var total = props.total || props.parts.reduce(function (s, p) { return s + p.value; }, 0) || 1;
+    var txt = props.parts.map(function (p) { return p.label + ' = ' + p.value; }).join(' + ') + ' = ' + total;
+    return html`<div class="split-bar" role="img" aria-label=${txt}>
+      <div style="display:flex;height:26px;border:1px solid var(--muted);border-radius:6px;overflow:hidden">
+        ${props.parts.map(function (p) {
+          return html`<div style=${'flex:' + p.value + ' 0 0;background:' + (p.color ? 'var(--' + p.color + ')' : 'var(--accent)') + ';display:' + (p.value > 0 ? 'block' : 'none')}></div>`;
+        })}
+      </div>
+      <div class="mono" style="font-size:13px;margin-top:4px">${txt}</div>
+    </div>`;
+  }
+
+  /** Play/pause + scrubber for t ∈ [0,1]. props: value, onChange(t), duration (s, default 3), label, loop. */
+  function Player(props) {
+    var st = useState(false), playing = st[0], setPlaying = st[1];
+    var tRef = useRef(props.value); tRef.current = props.value;
+    useEffect(function () {
+      if (!playing) return;
+      var dur = (props.duration || 3) * 1000, last = null, id;
+      function frame(now) {
+        if (last == null) last = now;
+        var t = tRef.current + (now - last) / dur; last = now;
+        if (t >= 1) { if (props.loop) t -= 1; else { props.onChange(1); setPlaying(false); return; } }
+        props.onChange(t); id = requestAnimationFrame(frame);
+      }
+      id = requestAnimationFrame(frame);
+      return function () { cancelAnimationFrame(id); };
+    }, [playing]);
+    return html`<div class="row" style="align-items:center;gap:10px">
+      <${Btn} onClick=${function () { if (!playing && props.value >= 1) props.onChange(0); setPlaying(!playing); }}>${playing ? 'Pause' : 'Play'}<//>
+      <div style="flex:1"><${Slider} label=${props.label || 't'} min="0" max="1" step="0.01" value=${props.value}
+        display=${props.value.toFixed(2)} onInput=${function (x) { setPlaying(false); props.onChange(x); }} /></div>
+    </div>`;
+  }
+
   SV.ui = { html: html, useMerge: useMerge, useId: useId, Seg: Seg, Check: Check, Btn: Btn, Slider: Slider,
-    MatrixEditor: MatrixEditor, Panel: Panel, KV: KV, Tex: Tex, Chart: Chart, PredictReveal: PredictReveal };
+    MatrixEditor: MatrixEditor, Panel: Panel, KV: KV, Tex: Tex, Chart: Chart, PredictReveal: PredictReveal, SplitBar: SplitBar, Player: Player };
 })(window);
