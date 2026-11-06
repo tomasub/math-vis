@@ -3,10 +3,6 @@ date created: 2026-11-04T13:11
 date modified: 2026-11-04T16:11
 ---
 
-# Infoa prototyypistä
-
-Tein prototyypin Claude Opus 5.5 -mallilla, ja jatkan sen kehitystä kunnes saan kokonaisen sivun vähintään lineaarialgebran visualisaatioille. Kehitin prototyyppiä aste kerrallaan, ensin wireframe-mallilla, sitten lisäämällä osioita ja suunnittelemalla niiden sisällöt, ja lopuksi tekemällä osaan 1.1 proof-of-concept -mallin.
-
 # Study visualisations
 
 Interactive visualisations for chemical engineering math courses, organised as
