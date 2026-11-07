@@ -94,7 +94,7 @@ interrupted step doesn't count as a review round. Partial worktree work is commi
 `WIP <id>: paused at usage limit`. To continue, run **the same command again** after the reset. It
 resumes each paused id where it stopped: it reuses the builder session with `--resume` if the session
 still exists, otherwise it starts a builder told the existing files are partial. Then it deletes
-`PAUSED.json`. `scripts/hermes/viz-batch.sh` handles 75 by committing everything as
+`PAUSED.json`. The Hermes cron script `viz-batch.sh` (live copy on the Hermes host, reference copy in `scripts/hermes/viz-batch.sh`; it sources `scripts/hermes/paused-run.sh`) handles 75 by committing everything as
 `WIP <ids>: paused at usage limit` on the build branch and pushing it, with no pull request. Its next
 run checks out that branch and continues the same ids, then opens the pull request as usual.
 Test without usage: `--simulate-limit build|review|fix` together with `--fake-review-output <log>`.
