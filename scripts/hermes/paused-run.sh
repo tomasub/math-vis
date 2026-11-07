@@ -1,4 +1,4 @@
-# Sourced by scripts/hermes/viz-batch.sh: carry a batch across a usage-limit pause (exit code 75).
+# Sourced by the Hermes cron script viz-batch.sh (live on the Hermes host; reference copy next to this file): carry a batch across a usage-limit pause (exit code 75).
 #
 #   source "$(dirname "$0")/paused-run.sh"
 #   if b=$(paused_branch); then git checkout -q "$b"; IDS=$(paused_ids); fi    # continue, don't pick new ids
