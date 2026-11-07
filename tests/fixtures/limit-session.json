@@ -1,0 +1,10 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": true,
+  "api_error_status": 429,
+  "total_cost_usd": 0,
+  "session_id": "",
+  "simulated": "--simulate-limit",
+  "result": "You have hit your session limit · resets 3:45pm"
+}
