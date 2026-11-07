@@ -118,7 +118,7 @@
                 "title": "Dimension theorem as a split of the input space",
                 "refs": "Thm 1.1.1",
                 "interaction": "animation · rank slider",
-                "status": "placeholder",
+                "status": "ready",
                 "module": "js/viz/dimension-split.js",
                 "source": "Lecture 2 · Thm 1.1.1",
                 "purpose_html": "Splitting R<sup>n</sup> into N(A) and a complement, A collapses N(A) to <b>0</b> and maps the complement one-to-one onto R(A), so dim R(A) + dim N(A) = n (Thm 1.1.1): what is lost to N(A) is exactly what is missing from R(A).",
