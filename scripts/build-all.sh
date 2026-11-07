@@ -7,6 +7,7 @@
 #   scripts/build-all.sh 1.3 2.1 2.2
 #   scripts/build-all.sh --parallel 3 1.3 2.1 2.2
 #   scripts/build-all.sh --skip-toolkit 1.3          (toolkit already committed)
+#   scripts/build-all.sh --continue 1.3 2.1          (reuse branch viz/<id> + worktree; review first)
 #   BUILDER_MODEL=sonnet REVIEWER_MODEL=opus MAX_ROUNDS=2 scripts/build-all.sh 1.3
 #   scripts/build-all.sh --fake-review-output tests/fixtures/review-pass-text.json
 #        (no ids: parse that saved reviewer log, print the verdict, exit 0 pass / 1 fail / 3 none)
@@ -19,6 +20,9 @@
 # Verdict: .structured_output if present, else the reply's final `VERDICT: PASS|FAIL` line
 #          (scripts/review-verdict.js). No verdict → the review is re-run once; still none →
 #          "review inconclusive": work committed on the build branch, log file named, no fix round.
+# Worktrees: each gets the main checkout's node_modules linked in and must load Playwright, find
+#          Chromium and import numpy before its builder starts; otherwise that id stops as a SETUP
+#          ERROR. A reviewer FAIL that only reports a broken environment is a SETUP ERROR too.
 # Usage limit: any claude call that stops on a usage/rate limit (scripts/claude-result.js) stops
 #          the batch with exit 75 and writes logs/PAUSED.json. Nothing is stashed or BLOCKED and the
 #          interrupted step is not counted. Run the same command again later to continue.
@@ -36,7 +40,9 @@ SKIP_TOOLKIT=false
 FAKE_REVIEW=""
 SIMULATE_LIMIT=""  # hidden test option: --simulate-limit build|review|fix
 IDS=()
+CONTINUE_IDS=" "   # ids given with --continue, space-padded
 EXIT_PAUSED=75
+EXIT_SETUP=4
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -47,7 +53,10 @@ while [ $# -gt 0 ]; do
     --fake-review-output=*) FAKE_REVIEW="${1#*=}"; shift ;;
     --simulate-limit) SIMULATE_LIMIT="${2:-}"; shift 2 ;;
     --simulate-limit=*) SIMULATE_LIMIT="${1#*=}"; shift ;;
-    -h|--help) sed -n '2,24p' "$0"; exit 0 ;;
+    --continue) shift; n=0
+      while [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; do IDS+=("$1"); CONTINUE_IDS="$CONTINUE_IDS $1 "; n=$((n + 1)); shift; done
+      [ "$n" -gt 0 ] || { echo "--continue needs at least one id"; exit 2; } ;;
+    -h|--help) sed -n '2,28p' "$0"; exit 0 ;;
     -*) echo "unknown option: $1"; exit 2 ;;
     *) IDS+=("$1"); shift ;;
   esac
@@ -74,6 +83,33 @@ case "$PARALLEL" in ''|*[!0-9]*) echo "--parallel needs a number"; exit 2 ;; esa
 [ -n "$FAKE_REVIEW" ] && echo "== --fake-review-output: every review is $FAKE_REVIEW (builders still call claude)"
 [ -n "$SIMULATE_LIMIT" ] && echo "== --simulate-limit: the first $SIMULATE_LIMIT call returns a fake usage limit"
 for cmd in claude git jq node python3; do command -v "$cmd" >/dev/null || { echo "missing: $cmd"; exit 2; }; done
+is_continue() { case "$CONTINUE_IDS" in *" $1 "*) return 0 ;; esac; return 1; }
+
+# Playwright browsers: one location for the main checkout, every worktree and every claude call.
+if [ -z "${PLAYWRIGHT_BROWSERS_PATH:-}" ]; then
+  for d in "$HOME/.cache/ms-playwright" "$HOME/Library/Caches/ms-playwright"; do
+    [ -d "$d" ] && { export PLAYWRIGHT_BROWSERS_PATH="$d"; break; }
+  done
+fi
+# check_env <dir> → silent and 0 when npm test / smoke / fixtures can run there; else prints why, 1
+check_env() {
+  local msg
+  msg=$(cd "$1" && node -e '
+    let pw;
+    try { pw = require("playwright"); } catch (e) { console.log("node_modules/playwright is missing (" + (e.code || e.message) + ")"); process.exit(1); }
+    const exe = pw.chromium.executablePath();
+    if (!require("fs").existsSync(exe)) {
+      console.log("Chromium is not installed at " + exe + " (PLAYWRIGHT_BROWSERS_PATH=" +
+        (process.env.PLAYWRIGHT_BROWSERS_PATH || "unset") + "); run: npx playwright install chromium");
+      process.exit(1);
+    }' 2>&1) || { echo "$msg"; return 1; }
+  (cd "$1" && python3 -c "import numpy") >/dev/null 2>&1 || { echo "python3 cannot import numpy (needed by npm run fixtures)"; return 1; }
+}
+if ! env_err=$(check_env "$PWD"); then
+  echo "== setup error in $PWD: $env_err"
+  echo "   fix it first (npm install && npx playwright install chromium), then re-run."
+  exit "$EXIT_SETUP"
+fi
 BATCH="$(IFS=-; echo "${IDS[*]}")"
 mkdir -p logs
 
@@ -149,6 +185,7 @@ CLAUDE=(claude -p --strict-mcp-config) # no MCP servers from user settings in bu
 VERDICT_SCHEMA='{"type":"object","properties":{"verdict":{"type":"string","enum":["pass","fail"]},"summary":{"type":"string"},"fixes":{"type":"array","items":{"type":"string"}}},"required":["verdict","summary","fixes"]}'
 
 VERDICT_RULE='End your reply with the verdict block, exactly as .claude/agents/viz-reviewer.md says: a line `VERDICT: PASS` or `VERDICT: FAIL`. Nothing may follow VERDICT: PASS. After VERDICT: FAIL only the numbered fixes, one per line ("1. <file>: <change>"). If a StructuredOutput tool is available, also call it with the same verdict and fixes.'
+EXISTING_NOTE='This visualisation was built in an earlier run and its branch already holds that work. Continue the existing work: read what is there first and change only what the fixes below need.'
 CONTINUE_NOTE='A usage limit stopped the previous run of this task part-way. Continue the unfinished work; existing files are partial — check them before building on them.'
 
 # ---- per-id state (files, so background jobs and bash 3.2 can share it) -------
@@ -212,16 +249,23 @@ session_exists() { # a saved Claude Code session for this id still on disk?
   [ -n "${1:-}" ] || return 1
   ls "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/projects/*/"$1".jsonl >/dev/null 2>&1
 }
-# builder <log> <id> <phase build|fix> <round> <prompt> <continuing:true|false>
-# Resumes the id's builder session when there is one (always for fix rounds; for a continued step,
-# only if it still exists), otherwise starts a fresh builder.
+# builder <log> <id> <phase build|fix> <round> <prompt> <mode false|limit|continue>
+# Resumes the id's builder session when there is one (always in this run's own fix rounds; after a
+# pause or with --continue only if it still exists), otherwise starts a fresh builder. Modes:
+#   limit    — continuing a step a usage limit interrupted: files are partial
+#   continue — --continue: the branch holds an earlier run's work
 builder() {
-  local log="$1" id="$2" phase="$3" round="$4" prompt="$5" cont="$6" s
+  local log="$1" id="$2" phase="$3" round="$4" prompt="$5" mode="$6" s
   s=$(st_get "$id" session)
-  if $cont; then prompt="$CONTINUE_NOTE Task: continue the unfinished work on $id; existing files are partial.
+  case "$mode" in
+    limit) prompt="$CONTINUE_NOTE Task: continue the unfinished work on $id; existing files are partial.
 
-$prompt"; fi
-  if [ -n "$s" ] && { ! $cont || session_exists "$s"; }; then
+$prompt" ;;
+    continue) prompt="$EXISTING_NOTE Task: continue the existing work on $id.
+
+$prompt" ;;
+  esac
+  if [ -n "$s" ] && { [ "$mode" = false ] || session_exists "$s"; }; then
     claude_run "$log" "$id" "$phase" "$round" "$prompt" --resume "$s" --model "$BUILDER_MODEL" \
       --permission-mode acceptEdits --allowedTools "$BUILD_TOOLS" --output-format json
     # session gone after all ("No conversation found…") → fall back to a fresh builder
@@ -245,6 +289,8 @@ parse_review() {
   R_VERDICT=$(jq -r .verdict <<<"$j")
   R_SUMMARY=$(jq -r 'if .verdict == "none" then "no verdict: " + .reason else .summary end' <<<"$j")
   R_FIXES=$(jq -r '.fixes | to_entries | map("\(.key + 1). \(.value)") | join("\n")' <<<"$j")
+  R_SETUP=$(jq -r '(.setup_fixes // []) | join("; ")' <<<"$j")
+  R_SETUP_ONLY=$(jq -r '.setup_only // false' <<<"$j")
 }
 # run_review <log> <id> <round> <prompt>  → one reviewer call (or --fake-review-output), then parse
 run_review() {
@@ -274,16 +320,19 @@ cycle() {
   phase=$(resume_get "$id" phase); round=$(resume_get "$id" round)
   s=$(resume_get "$id" session_id); [ -n "$s" ] && st_set "$id" session "$s"
   C_VERDICT=fail; C_SUMMARY="builder produced no reviewable result"
+  local fixmode=false
+  if [ -z "$phase" ] && is_continue "$id"; then phase=continue; fixmode=continue; fi
   case "$phase" in
     "")     builder "$lp-build-1.json" "$id" build 1 "$bprompt" false ;;
+    continue) echo "== $id: --continue: reviewing the existing work on its branch first" ;;
     build)  echo "== $id: continuing the paused build"
-            builder "$lp-build-1-cont.json" "$id" build 1 "$bprompt" true ;;
+            builder "$lp-build-1-cont.json" "$id" build 1 "$bprompt" limit ;;
     review) echo "== $id: continuing at review $round (the paused review is not counted)"; start=$round ;;
     fix)    echo "== $id: continuing the paused fix round after review $round"
             R_FIXES=$(resume_get "$id" fixes); st_set "$id" fixes "$R_FIXES"
             builder "$lp-build-$((round + 1))-cont.json" "$id" fix "$round" "$fprompt
 
-$R_FIXES" true
+$R_FIXES" limit
             start=$((round + 1)) ;;
   esac
   # a toolkit builder that changed nothing leaves nothing to review or commit
@@ -296,13 +345,18 @@ $R_FIXES" true
     C_VERDICT="$R_VERDICT"; C_SUMMARY="$R_SUMMARY"
     echo "== $id: review $round → $C_VERDICT · $C_SUMMARY"
     [ "$C_VERDICT" = fail ] || break
+    if [ "$R_SETUP_ONLY" = true ]; then # the environment is broken, not the code: no fix round
+      C_VERDICT=setup; C_SUMMARY="setup error reported by the reviewer: ${R_SETUP:-$R_SUMMARY} (log $(basename "$R_LOG"))"
+      break
+    fi
+    [ -n "$R_SETUP" ] && echo "   not sent to the builder (setup, not code): $R_SETUP"
     if [ -z "$R_FIXES" ]; then C_SUMMARY="$C_SUMMARY (FAIL without concrete fixes; no fix round, log $(basename "$R_LOG"))"; break; fi
     [ "$round" -lt "$max" ] || break
     st_set "$id" fixes "$R_FIXES"
     echo "== $id: fix round $round ($(grep -c . <<<"$R_FIXES") fixes)"
     builder "$lp-build-$((round + 1)).json" "$id" fix "$round" "$fprompt
 
-$R_FIXES" false
+$R_FIXES" "$fixmode"
   done
   return 0
 }
@@ -382,6 +436,11 @@ Read their entries in docs/catalogue.md, check what already exists in js/toolkit
     "Review the uncommitted toolkit work for the batch: ${IDS[*]}. This is a toolkit-phase review: check that every addition is general (not shaped around one visualisation), documented in the scene-format comment, demoed in dev/gallery.html, that new maths has NumPy fixture cases, and that nothing already ready has regressed." \
     "The reviewer rejected the toolkit. Fix every item, re-run npm test, npm run fixtures and npm run smoke -- $(ready_ids) --no-shots, then list what you changed per item."
   [ "$C_VERDICT" = none ] && tk_inconclusive
+  if [ "$C_VERDICT" = setup ]; then
+    echo "== toolkit for $BATCH: SETUP ERROR — $C_SUMMARY"
+    echo "   no fix round was spent. Fix the environment, then re-run. Work left uncommitted for you to inspect."
+    exit "$EXIT_SETUP"
+  fi
 
   tk_cost=$(sum_costs logs/toolkit-"$BATCH"-*.json)
   if [ "$C_VERDICT" = unchanged ]; then
@@ -413,6 +472,9 @@ build_one() { # runs in a background job: build + review + fix rounds, inside th
       "Review visualisation $id, just built in this worktree (branch $branch). Follow your agent instructions." \
       "The reviewer rejected visualisation $id. Fix every item, re-run npm test and npm run smoke -- $id, update docs/reports/$id.md, commit on $branch, then list what you changed per item."
     verdict="$C_VERDICT"; summary="$C_SUMMARY"
+    if [ "$verdict" = setup ]; then
+      commit_changes . "viz $id: work in progress (setup error, see $(basename "$R_LOG"))" || true
+    fi
     if [ "$verdict" = none ]; then
       # keep the work: commit whatever the builder left uncommitted on its own branch
       commit_changes . "viz $id: work in progress (review inconclusive, see $(basename "$R_LOG"))" || true
@@ -426,13 +488,47 @@ build_one() { # runs in a background job: build + review + fix rounds, inside th
   } >> "$REPO/logs/$id.console" 2>&1
 }
 paused() { ls logs/PAUSED-*.json >/dev/null 2>&1; }
+# prepare_worktree <wt> → link the main checkout's node_modules in (git-ignored) and check that the
+# checks can run there. Prints the problem and returns 1 if not.
+prepare_worktree() {
+  local wt="$1" ex
+  ex="$(git rev-parse --git-common-dir)/info/exclude"   # shared by every worktree
+  mkdir -p "$(dirname "$ex")"
+  grep -qx '/node_modules' "$ex" 2>/dev/null || echo '/node_modules' >> "$ex"
+  # a real node_modules directory already in the worktree is left alone; check_env judges it
+  if [ -L "$wt/node_modules" ] || [ ! -e "$wt/node_modules" ]; then ln -sfn "$REPO/node_modules" "$wt/node_modules"; fi
+  git -C "$wt" check-ignore -q node_modules || { echo "node_modules link in $wt is not git-ignored"; return 1; }
+  check_env "$wt"
+}
+# setup_error <id> <message> → this id stops before any claude call
+setup_error() {
+  echo "$2" > "logs/$1.summary"; echo setup > "logs/$1.verdict"
+  echo "== $1: SETUP ERROR — $2"
+}
+# drop_progress_line <dir> <id> → remove that id's BLOCKED / SETUP ERROR / inconclusive line there
+drop_progress_line() {
+  local f="$1/docs/progress.md" re
+  [ -f "$f" ] || return 0
+  re="^- \[ \] $2 (BLOCKED|SETUP ERROR|review inconclusive)"
+  grep -Eq "$re" "$f" || return 0
+  grep -Ev "$re" "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+  commit_changes "$1" "progress: continue $2" docs/progress.md
+}
 
 for id in "${IDS[@]}"; do
   paused && break
   if grep -q "^- \[x\] $id " docs/progress.md; then echo "== $id already done, skipping"; continue; fi
   wt="$REPO/../$REPO_NAME-wt-$id"
   rm -f "logs/$id.verdict" "logs/$id.summary" "logs/$id.reviewlog"
-  if [ -n "$(resume_get "$id" phase)" ]; then
+  if is_continue "$id" && [ -z "$(resume_get "$id" phase)" ]; then
+    if ! git rev-parse -q --verify "refs/heads/viz/$id" >/dev/null; then
+      echo "== $id: --continue needs an existing branch viz/$id — skipping"; continue
+    fi
+    [ -d "$wt" ] || git worktree add -q "$wt" "viz/$id"
+    drop_progress_line "$REPO" "$id"
+    drop_progress_line "$wt" "$id"
+    echo "== $id: --continue on viz/$id in $wt (review first)"
+  elif [ -n "$(resume_get "$id" phase)" ]; then
     if [ -d "$wt" ]; then :
     elif git rev-parse -q --verify "refs/heads/viz/$id" >/dev/null; then git worktree add -q "$wt" "viz/$id"
     else git worktree add -q "$wt" -b "viz/$id"
@@ -443,8 +539,9 @@ for id in "${IDS[@]}"; do
     git worktree add -q "$wt" -b "viz/$id" 2>/dev/null || { echo "== $id: could not create worktree (branch viz/$id may exist)"; continue; }
   fi
   st_set "$id" wt "$wt"
-  ( cd "$wt" && build_one "$id" "$wt" ) &
   started+=("$id")
+  if ! env_err=$(prepare_worktree "$wt"); then setup_error "$id" "$env_err (worktree $wt)"; continue; fi
+  ( cd "$wt" && build_one "$id" "$wt" ) &
   # simple concurrency gate: wait for a slot before launching the next one (or stop on a pause)
   while [ "$(jobs -rp | wc -l | tr -d ' ')" -ge "$PARALLEL" ] && ! paused; do sleep 2; done
 done
@@ -454,6 +551,7 @@ else wait; echo "== all builders finished"; fi
 
 # ---- merge passing branches, one at a time ---------------------------------
 TOTAL=0
+SETUP_ERRORS=""
 for id in ${started[@]+"${started[@]}"}; do
   [ -f "logs/PAUSED-$id.json" ] && { echo "== $id: paused, continues next run"; continue; }
   wt="$REPO/../$REPO_NAME-wt-$id"
@@ -462,6 +560,14 @@ for id in ${started[@]+"${started[@]}"}; do
   summary=$(cat "logs/$id.summary" 2>/dev/null || echo "no verdict")
   cost=$(sum_costs logs/"$id"-build-*.json logs/"$id"-review-*.json)
   TOTAL=$(echo "$TOTAL $cost" | awk '{printf "%.4f", $1 + $2}')
+
+  if [ "$verdict" = "setup" ]; then
+    echo "- [ ] $id SETUP ERROR: $summary (branch $branch, worktree $wt). Fix the environment, then: scripts/build-all.sh --continue $id" >> docs/progress.md
+    commit_changes . "progress: $id setup error" docs/progress.md
+    echo "== $id: SETUP ERROR — $summary · no fix round spent · \$$cost"
+    SETUP_ERRORS="$SETUP_ERRORS $id"
+    continue
+  fi
 
   if [ "$verdict" = "inconclusive" ]; then
     rlog=$(cat "logs/$id.reviewlog" 2>/dev/null || echo "logs/$id-review-*.json")
@@ -511,4 +617,7 @@ done
 paused && finish_pause
 echo
 echo "== batch $BATCH done · total \$$TOTAL"
+if [ -n "$SETUP_ERRORS" ]; then
+  echo "== SETUP ERRORS:$SETUP_ERRORS — see docs/progress.md; fix the environment, then --continue them"
+fi
 echo "   per-visualisation costs above; raw logs in logs/*.json (total_cost_usd); progress in docs/progress.md"

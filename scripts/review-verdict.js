@@ -37,7 +37,30 @@ function numberedFixes(lines) {
  * @param {string} text  the contents of a claude -p JSON log
  * @returns {{verdict:'pass'|'fail'|'none', source:string, summary:string, fixes:string[], reason:string}}
  */
-function parseReview(text) {
+// A fix that only reports a broken environment (a check that could not run), not a code problem.
+// The reviewer marks these "SETUP: …"; the pattern is a fallback for unmarked ones.
+const SETUP_MARK = /^\s*setup\s*[:—-]\s*/i;
+const SETUP_TEXT = new RegExp(
+  '(playwright is not installed|cannot find module|module not found|node_modules|command not found|' +
+  'executable doesn.t exist|browsers? (?:is |are )?(?:not installed|missing)|sandbox (?:blocked|denied)|' +
+  '(?:smoke|npm|python3?|numpy|pdftoppm|chromium|playwright|fixtures)[^.;]{0,60}' +
+  '(?:could ?n.t|could not|cannot|can.t|failed to|unable to) (?:run|start|launch|be run|import|load))', 'i');
+const isSetup = (f) => SETUP_MARK.test(f) || SETUP_TEXT.test(f);
+
+/**
+ * Split a verdict's fixes into code fixes (sent to the builder) and setup items (environment only).
+ * setup_only: a FAIL whose only complaints are setup items → a setup error, not a fix round.
+ */
+function classify(r) {
+  const setup = r.fixes.filter(isSetup).map((f) => f.replace(SETUP_MARK, ''));
+  const fixes = r.fixes.filter((f) => !isSetup(f));
+  const setupOnly = r.verdict === 'fail' && fixes.length === 0 && (setup.length > 0 || SETUP_TEXT.test(r.summary));
+  return { ...r, fixes, setup_fixes: setup, setup_only: setupOnly };
+}
+
+function parseReview(text) { return classify(parseReviewRaw(text)); }
+
+function parseReviewRaw(text) {
   const none = (reason) => ({ verdict: 'none', source: 'none', summary: '', fixes: [], reason });
   let log;
   try { log = JSON.parse(text); } catch (e) { return none('log is not valid JSON'); }
@@ -82,7 +105,7 @@ function parseReview(text) {
   return none(`no structured_output and no VERDICT line in .result (${status})`);
 }
 
-module.exports = { parseReview };
+module.exports = { parseReview, isSetup };
 
 if (require.main === module) {
   const file = process.argv[2];

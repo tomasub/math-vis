@@ -72,3 +72,26 @@ test('broken / empty logs give none', () => {
   assert.match(parseReview(log({ result: '' })).reason, /empty \.result/);
   assert.equal(parseReview(log({ subtype: 'error_max_turns' })).verdict, 'none');
 });
+
+/* ---------- setup (environment) items ---------- */
+test('real 1.3 case: smoke could not run + a code bug → code fix sent, smoke item kept apart', () => {
+  const r = parseReview(log({ result: 'Drag bug, and smoke could not run.\nVERDICT: FAIL\n1. js/viz/two-bases.js: clamp z to [−2, 2] after a drag.\n2. npm run smoke could not run: Playwright is not installed.' }));
+  assert.deepEqual([r.verdict, r.setup_only, r.fixes.length, r.setup_fixes.length], ['fail', false, 1, 1]);
+  assert.match(r.fixes[0], /clamp z/);
+});
+test('only environment complaints → setup_only (no fix round)', () => {
+  const r = parseReview(log({ result: 'Could not verify.\nVERDICT: FAIL\n1. SETUP: npm run smoke failed: Playwright is not installed in the worktree.' }));
+  assert.deepEqual([r.setup_only, r.fixes, r.setup_fixes], [true, [], ['npm run smoke failed: Playwright is not installed in the worktree.']]);
+});
+test('legacy FAIL whose summary only blames the environment, no fixes → setup_only', () => {
+  assert.equal(parseReview(log({ result: '**FAIL** — npm run smoke could not run: Playwright is not installed.' })).setup_only, true);
+});
+test('code fixes that merely mention running are not setup items', () => {
+  const r = parseReview(log({ result: 'x\nVERDICT: FAIL\n1. js/viz/a.js: the animation could not run past t = 1; clamp t.\n2. js/viz/a.js: label the Play button.' }));
+  assert.deepEqual([r.setup_only, r.fixes.length, r.setup_fixes.length], [false, 2, 0]);
+});
+test('structured_output fixes are classified too; PASS is never setup_only', () => {
+  const r = parseReview(log({ structured_output: { verdict: 'fail', summary: 's', fixes: ['SETUP: pdftoppm cannot run'] } }));
+  assert.equal(r.setup_only, true);
+  assert.equal(parseReview(log({ result: 'ok\nVERDICT: PASS' })).setup_only, false);
+});

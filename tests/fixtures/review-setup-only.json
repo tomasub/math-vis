@@ -1,0 +1,10 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "num_turns": 6,
+  "total_cost_usd": 0.12,
+  "session_id": "00000000-0000-0000-0000-000000000003",
+  "permission_denials": [],
+  "result": "Could not verify the visualisation: the smoke test did not run.\n\nVERDICT: FAIL\n1. SETUP: npm run smoke could not run: Playwright is not installed in this worktree."
+}

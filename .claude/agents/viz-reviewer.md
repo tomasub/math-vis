@@ -75,6 +75,10 @@ Reply with **at most 15 lines total**, in this order:
      Put the worst first. If there are more than 8 problems, list the 8 that matter most and say
      how many you dropped in the sentence at the top.
    - A FAIL without numbered fixes is useless: the script can't send anything to the builder.
+   - A check that couldn't run because of the **environment** (for example Playwright missing, or a
+     command blocked) is not a code fix. List it as `N. SETUP: <what couldn't run and why>`. Setup
+     items are never sent to the builder. If they are your only complaints, the run stops as a setup
+     error instead of spending a fix round.
 
 ```
 Default state sits outside the axis range and tol is missing from the panel.

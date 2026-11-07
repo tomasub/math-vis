@@ -86,6 +86,17 @@ open dev/gallery.html             # toolkit gallery
 
 Smoke needs Playwright once: `npm install && npx playwright install chromium`.
 
+**Worktrees and setup errors.** Each visualisation builds in its own git worktree, which has only
+tracked files. `scripts/build-all.sh` links the main checkout's `node_modules` into it (git-ignored)
+and sets `PLAYWRIGHT_BROWSERS_PATH` once for every check. Before a builder starts, it checks that
+Playwright loads, Chromium exists and `python3` imports numpy. If not, that id stops as
+`SETUP ERROR` in `docs/progress.md`, with no claude call (exit 4 if the main checkout itself fails the
+check). A reviewer FAIL whose only items are `SETUP: …` (a check that couldn't run) is a setup error
+too: no fix round is spent on it. After fixing the environment, run
+`scripts/build-all.sh --continue <id> [<id>…]`. It reuses branch `viz/<id>` and its worktree, removes
+that id's BLOCKED / SETUP ERROR line, starts with a review, and then does the normal fix rounds
+(resuming the builder session if it still exists).
+
 **Exit code 75 = paused at a usage limit.** `scripts/build-all.sh` stops the whole batch as soon as a
 `claude -p` call hits a usage or rate limit (`scripts/claude-result.js`). It writes `logs/PAUSED.json`
 (id, phase build/review/fix, builder session, reset time) and prints
