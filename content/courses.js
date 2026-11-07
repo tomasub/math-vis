@@ -97,7 +97,7 @@
                 "title": "One subspace, two bases",
                 "refs": "Ex 1.1.1 · Defs 1.1.3–1.1.4",
                 "interaction": "3D · drag on plane",
-                "status": "placeholder",
+                "status": "ready",
                 "module": "js/viz/two-bases.js",
                 "source": "Lecture 1 · Ex 1.1.1 · Defs 1.1.3–1.1.4",
                 "purpose_html": "A subspace has infinitely many bases, but the coordinates of a vector in a given basis are unique, and every basis of R(A) has the same number of vectors (Defs 1.1.3–1.1.4). The coordinate vector <b>z</b> (column basis of A) and <b>x</b> (basis w<sub>1</sub>, w<sub>2</sub>) describe the same <b>y</b> &isin; R(A).",
