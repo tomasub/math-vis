@@ -37,8 +37,9 @@
       var bs = [];
       for (var i = 0; i < N_SAMPLES; i++) {
         if (s.mode === 'range') {
-          var x = L.sampleInBall(s.n, RADIUS / 2, rand);
-          var b = s.A.slice(0, s.m).map(function (r) { var t = 0; for (var j = 0; j < s.n; j++) t += r[j] * x[j]; return t; });
+          var rowsA = s.A.slice(0, s.m).map(function (r) { return r.slice(0, s.n); });
+          var x = L.sampleInBall(s.n, RADIUS / Math.max(1, L.norm2(rowsA)), rand);   // ‖Ax‖ ≤ ‖A‖₂‖x‖ ≤ 3
+          var b = rowsA.map(function (r) { var t = 0; for (var j = 0; j < s.n; j++) t += r[j] * x[j]; return t; });
           bs.push(pad3(b));
         } else bs.push(pad3(L.sampleInBall(s.m, RADIUS, rand)));
       }
@@ -96,7 +97,7 @@
       if (d.rank === 0) sc.dots.push({ at: O, color: 'accent', r: 10, opacity: 0.3 });
       if (d.rank === 1) sc.lines.push({ dir: pad3(d.an.E[0]), color: 'accent' });
       if (d.rank === 2 && m === 3) sc.planes.push({ basis: [pad3(d.an.E[0]), pad3(d.an.E[1])], color: 'accent' });
-      if (d.rank === m && d.rank > 0) { if (dim === 2) sc.fillAll = 'accent'; else sc.box = 'accent'; }
+      if (d.rank === m && m > 1) { if (dim === 2) sc.fillAll = 'accent'; else sc.box = 'accent'; }
       var cols = ['q1', 'q2', 'q3'];
       for (var j = 0; j < s.n; j++) {
         var v = pad3(s.A.slice(0, m).map(function (r) { return r[j]; }));
@@ -114,9 +115,10 @@
       var f = L.fmtTex, rows = model.rows(s);
       var A = 'A = \\begin{bmatrix}' + rows.map(function (r) { return r.map(f).join(' & '); }).join('\\\\') +
         '\\end{bmatrix}\\in\\mathbb{R}^{' + s.m + '\\times ' + s.n + '}';
-      var rk = '\\begin{aligned}\\operatorname{rank}A &= ' + d.rank + ',\\quad \\dim N(A) = ' + d.nullDim + '\\\\ \\dim R(A) + \\dim N(A) &= ' + (d.rank + d.nullDim) + ' = n\\end{aligned}';
+      var rk = '\\operatorname{rank}A = ' + d.rank + ',\\; \\dim N(A) = ' + d.nullDim;
+      var dimThm = '\\dim R(A) + \\dim N(A) = ' + (d.rank + d.nullDim) + ' = n';
       var tol = '\\mathrm{tol} = 10^{-10}\\max(1, \\|A\\|_2) = ' + L.fmtETex(d.an.tol);
-      return { A: A, rank: rk, tol: tol };
+      return { A: A, rank: rk, dimThm: dimThm, tol: tol };
     },
   };
 
@@ -163,6 +165,7 @@
           <${ui.Panel} title="Live values">
             <div class="formula"><${ui.Tex} display tex=${tex.A} /></div>
             <div class="formula"><${ui.Tex} display tex=${tex.rank} /></div>
+            <div class="formula"><${ui.Tex} display tex=${tex.dimThm} /></div>
           <//>
           <${ui.Panel} title="Check yourself">
             <${ui.PredictReveal} resetKey=${s.m + ',' + s.n + ',' + JSON.stringify(A)}

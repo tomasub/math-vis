@@ -49,5 +49,18 @@ test('2.2 entries clamp and tex', () => {
   const s = M.initial();
   assert.equal(M.setEntry(s, 0, 0, 9).A[0][0], 3);
   const t = M.tex(s, M.derive(s));
-  assert.ok(t.A.includes('3\\times 2')); assert.ok(t.rank.includes('= n')); assert.ok(t.tol.includes('tol'));
+  assert.ok(t.A.includes('3\\times 2')); assert.ok(t.dimThm.includes('= n')); assert.ok(!t.rank.includes('\\\\')); assert.ok(t.tol.includes('tol'));
+});
+test('2.2 range samples stay inside the stage for a large-norm A', () => {
+  let s = M.initial();
+  s = Object.assign({}, s, { A: [[3, 3, 0], [3, 3, 0], [3, -3, 0]] }, M.setShape(s, 3, 2, M.seeded(9)));
+  s = Object.assign({}, s, M.setMode(s, 'range', M.seeded(9)));
+  s.bs.forEach((b) => assert.ok(Math.hypot(...b) <= 3 + 1e-9));
+  assert.equal(M.derive(s).counts.none, 0);
+});
+test('2.2 m = 1 rank 1: line only, no fillAll', () => {
+  let s = M.initial();
+  s = Object.assign({}, s, { A: [[2, 0, 0], [0, 0, 0], [0, 0, 0]] }, M.setShape(s, 1, 1, M.seeded(1)));
+  const sc = M.scene(s, M.derive(s));
+  assert.equal(sc.lines.length, 1); assert.ok(!sc.fillAll);
 });
