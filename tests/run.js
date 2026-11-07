@@ -73,6 +73,28 @@ test('coordsInBasis: dependent basis / off-plane point', () => {
   const r = L.coordsInBasis([[1, 0, 0], [0, 1, 0]], [0, 0, 1]);
   assert.equal(r.inSpan, false); near(r.residual, 1, 1e-12);
 });
+fx.detInv.forEach((c, i) => test(`det/inverse/singularValues/eigenvalues #${i} vs numpy`, () => {
+  near(L.det(c.rows), c.det, 1e-9, 1e-9);
+  const inv = L.inverse(c.rows);
+  if (c.singular) assert.ok(inv === null || L.singularValues(c.rows).pop() < 1e-8);
+  else inv.forEach((r, a) => r.forEach((v, b) => near(v, c.inv[a][b], 1e-7, 1e-8)));
+  L.singularValues(c.rows).forEach((v, k) => near(v, c.sv[k], 1e-8, 1e-8));
+  const ev = L.eigenvalues(c.rows).map((z) => [z.re, Math.abs(z.im)]).sort((p, q) => p[0] - q[0] || p[1] - q[1]);
+  const ref = c.eig.slice().sort((p, q) => p[0] - q[0] || p[1] - q[1]);
+  ev.forEach((z, k) => { near(z[0], ref[k][0], 1e-6, 1e-6); near(z[1], ref[k][1], 1e-6, 1e-6); });
+}));
+fx.singularValues.forEach((c, i) => test(`singularValues #${i} vs numpy svd`, () => {
+  L.singularValues(c.rows).forEach((v, k) => near(v, c.sv[k], 1e-8, 1e-8));
+}));
+fx.classify.forEach((c, i) => test(`classifySolution #${i} vs numpy ranks`, () => {
+  assert.equal(L.classifySolution(c.rows, c.b).kind, c.kind);
+}));
+test('eigenvalues: complex pair and zero eigenvalue; randomInBall inside ball', () => {
+  const e = L.eigenvalues([[0, -1], [1, 0]]); near(e[0].re, 0, 0, 1e-12); near(e[0].im, 1, 1e-12, 1e-12);
+  const z = L.eigenvalues([[1, 0, 0], [0, 0, 0], [0, 0, 2]]).map((q) => q.re).sort();
+  near(z[0], 0, 0, 1e-9); near(z[2], 2, 1e-9, 1e-9);
+  for (let k = 0; k < 50; k++) assert.ok(L.norm(L.randomInBall(3, 2)) <= 2 + 1e-12);
+});
 test('randomRankMatrix has the requested rank', () => {
   for (const r of [0, 1, 2]) { const A = L.randomRankMatrix(3, 2, r); assert.equal(L.splitInputSpace(A).rank, r); }
 });

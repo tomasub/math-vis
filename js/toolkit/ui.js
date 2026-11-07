@@ -189,6 +189,24 @@
     </div>`;
   }
 
+  /**
+   * Indicator lights: props.items = [{ label, on (true/false/null = undefined), detail }]. Lit = --q1 (condition holds),
+   * unlit = --warn (fails), null = hollow grey. State is also written as text ("holds"/"fails"/"undefined") so colour is not the only cue.
+   */
+  function Lights(props) {
+    return html`<ul class="lights" style="list-style:none;margin:0;padding:0">
+      ${props.items.map(function (it, i) {
+        var st = it.on === null || it.on === undefined ? 'undefined' : it.on ? 'holds' : 'fails';
+        var col = st === 'holds' ? 'var(--q1)' : st === 'fails' ? 'var(--warn)' : 'transparent';
+        return html`<li key=${i} style="display:flex;align-items:center;gap:8px;padding:3px 0">
+          <span aria-hidden="true" style=${'flex:none;width:14px;height:14px;border-radius:50%;border:2px solid ' + (st === 'undefined' ? 'var(--muted)' : col) + ';background:' + col}></span>
+          <span style="flex:1">${it.label}${it.detail ? html` <span class="mono" style="color:var(--muted);font-size:13px">${it.detail}</span>` : null}</span>
+          <span class="mono" style="font-size:12px;color:var(--muted)">${st}</span>
+        </li>`;
+      })}
+    </ul>`;
+  }
+
   SV.ui = { html: html, useMerge: useMerge, useId: useId, Seg: Seg, Check: Check, Btn: Btn, Slider: Slider,
-    MatrixEditor: MatrixEditor, Panel: Panel, KV: KV, Tex: Tex, Chart: Chart, PredictReveal: PredictReveal, SplitBar: SplitBar, Player: Player };
+    MatrixEditor: MatrixEditor, Panel: Panel, KV: KV, Tex: Tex, Chart: Chart, PredictReveal: PredictReveal, SplitBar: SplitBar, Player: Player, Lights: Lights };
 })(window);

@@ -398,9 +398,125 @@
     return null;
   }
 
+  /** Determinant of a small square matrix (array of rows) by LU with partial pivoting. [] → 1. */
+  function det(M) {
+    const n = M.length, A = M.map((r) => r.slice());
+    let d = 1;
+    for (let k = 0; k < n; k++) {
+      let p = k;
+      for (let i = k + 1; i < n; i++) if (Math.abs(A[i][k]) > Math.abs(A[p][k])) p = i;
+      if (A[p][k] === 0) return 0;
+      if (p !== k) { const t = A[p]; A[p] = A[k]; A[k] = t; d = -d; }
+      d *= A[k][k];
+      for (let i = k + 1; i < n; i++) {
+        const f = A[i][k] / A[k][k];
+        for (let j = k; j < n; j++) A[i][j] -= f * A[k][j];
+      }
+    }
+    return d;
+  }
+
+  /**
+   * Inverse of a square matrix (array of rows) column by column with gaussianSolve.
+   * Returns null when gaussianSolve reports M singular at the scale of its own entries
+   * (callers wanting the project tolerance should test σ_min against tol first).
+   */
+  function inverse(M) {
+    const n = M.length, cols = [];
+    for (let j = 0; j < n; j++) {
+      const x = gaussianSolve(M, M.map((_, i) => (i === j ? 1 : 0)));
+      if (!x) return null;
+      cols.push(x);
+    }
+    return M.map((_, i) => cols.map((c) => c[i]));
+  }
+
+  /**
+   * Singular values of A (array of rows, any shape), descending, length min(m,n). One-sided
+   * (Hestenes) Jacobi on the columns of the taller orientation, which keeps tiny singular values
+   * accurate to ~1e-16·‖A‖ (the Gram-matrix route would only give ~1e-8 near rank loss).
+   */
+  function singularValues(rows) {
+    const m = rows.length, n = m ? rows[0].length : 0;
+    if (!m || !n) return [];
+    let U = []; // columns of A (or of Aᵀ if A is wide) so that #columns ≤ length
+    if (m >= n) { for (let j = 0; j < n; j++) U.push(rows.map((r) => r[j])); } else U = rows.map((r) => r.slice());
+    const k = U.length;
+    for (let sweep = 0; sweep < 60; sweep++) {
+      let rotated = false;
+      for (let p = 0; p < k; p++) for (let q = p + 1; q < k; q++) {
+        const a = dot(U[p], U[p]), b = dot(U[q], U[q]), g = dot(U[p], U[q]);
+        if (g === 0 || Math.abs(g) <= 1e-15 * Math.sqrt(a * b)) continue;
+        rotated = true;
+        const th = (b - a) / (2 * g);
+        const t = (th >= 0 ? 1 : -1) / (Math.abs(th) + Math.sqrt(th * th + 1));
+        const c = 1 / Math.sqrt(t * t + 1), sn = c * t;
+        for (let l = 0; l < U[p].length; l++) {
+          const up = U[p][l], uq = U[q][l];
+          U[p][l] = c * up - sn * uq; U[q][l] = sn * up + c * uq;
+        }
+      }
+      if (!rotated) break;
+    }
+    return U.map((u) => norm(u)).sort((x, y) => y - x);
+  }
+
+  /**
+   * Eigenvalues σ(A) of a real square matrix of size 1…3 as [{re, im}] (complex pairs adjacent,
+   * im ≥ 0 first), sorted by |λ| descending. 2×2: closed form. 3×3: characteristic polynomial
+   * λ³ − tλ² + sλ − det, one real root by bisection (a real cubic always has one), the rest from
+   * the deflated quadratic. Accurate to ~1e-12 relative to ‖A‖ for the small, tame matrices used here.
+   */
+  function eigenvalues(M) {
+    const n = M.length;
+    const quad = (b, c) => { // λ² + bλ + c
+      const D = b * b - 4 * c;
+      if (D >= 0) { const q = Math.sqrt(D); return [{ re: (-b + q) / 2, im: 0 }, { re: (-b - q) / 2, im: 0 }]; }
+      return [{ re: -b / 2, im: Math.sqrt(-D) / 2 }, { re: -b / 2, im: -Math.sqrt(-D) / 2 }];
+    };
+    let out;
+    if (n === 1) out = [{ re: M[0][0], im: 0 }];
+    else if (n === 2) out = quad(-(M[0][0] + M[1][1]), det(M));
+    else if (n === 3) {
+      const t = M[0][0] + M[1][1] + M[2][2];
+      const s = (M[0][0] * M[1][1] - M[0][1] * M[1][0]) + (M[0][0] * M[2][2] - M[0][2] * M[2][0]) + (M[1][1] * M[2][2] - M[1][2] * M[2][1]);
+      const d = det(M);
+      const f = (x) => ((x - t) * x + s) * x - d;
+      const R = 1 + Math.max(Math.abs(t), Math.abs(s), Math.abs(d));
+      let lo = -R, hi = R;
+      for (let i = 0; i < 200; i++) { const mid = (lo + hi) / 2; if (f(mid) > 0) hi = mid; else lo = mid; }
+      const r = (lo + hi) / 2;
+      out = [{ re: r, im: 0 }].concat(quad(r - t, s + r * (r - t)));
+    } else throw new Error('eigenvalues: size 1…3 only');
+    return out.sort((a, b) => Math.hypot(b.re, b.im) - Math.hypot(a.re, a.im));
+  }
+
+  /**
+   * Solution-set type of A x = b (A array of rows m×n): { kind: 'unique' | 'many' | 'none', rank, nullity, tol }.
+   * 'none' iff b ∉ R(A) (residual of b against the orthonormal basis of R(A) above tol·max(1,‖b‖));
+   * otherwise 'unique' iff N(A) = {0} (rank = n), else 'many'. Same tol as analyse(columns).
+   */
+  function classifySolution(rows, b) {
+    const n = rows[0].length;
+    const cols = []; for (let j = 0; j < n; j++) cols.push(rows.map((r) => r[j]));
+    const an = analyse(cols);
+    const res = projectOntoBasis(an.E, b).residual;
+    const kind = res > an.tol * Math.max(1, norm(b)) ? 'none' : (an.rank === n ? 'unique' : 'many');
+    return { kind, rank: an.rank, nullity: n - an.rank, tol: an.tol, residual: res };
+  }
+
+  /** Point uniform in the closed ball of radius `radius` in ℝ^dim (Gaussian direction, radius·U^{1/dim}); `rand` ∈ [0,1) defaults to Math.random. */
+  function randomInBall(dim, radius, rand) {
+    const u = rand || Math.random;
+    const g = Array.from({ length: dim }, () => Math.sqrt(-2 * Math.log(1 - u())) * Math.cos(2 * Math.PI * u()));
+    const ng = norm(g) || 1;
+    const r = (radius == null ? 1 : radius) * Math.pow(u(), 1 / dim);
+    return g.map((x) => (x / ng) * r);
+  }
+
   const api = {
     TOL_FACTOR, dot, norm, jacobiEig, norm2, analyse, fmt, fmtE, sub, relationText, relationTex, fmtTex, fmtETex,
-    applyRows, coordsInBasis, splitInputSpace, randomRankMatrix, projectOntoBasis, completeOrthonormalBasis, gaussianSolve, minNormSolve, niceBasis,
+    applyRows, det, inverse, singularValues, eigenvalues, classifySolution, randomInBall, coordsInBasis, splitInputSpace, randomRankMatrix, projectOntoBasis, completeOrthonormalBasis, gaussianSolve, minNormSolve, niceBasis,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.SV = root.SV || {};

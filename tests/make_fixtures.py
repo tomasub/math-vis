@@ -171,6 +171,37 @@ for _ in range(25):
     r = int(np.linalg.matrix_rank(A, tol=tol_for(A)))
     cases["splitInput"].append({"rows": A.tolist(), "rank": r, "nullity": n - r})
 
+# 2.2 / 2.3: det, inverse, singular values, eigenvalues, solution-set kind
+cases["detInv"] = []
+for _ in range(30):
+    n = int(rng.integers(1, 4))
+    A = rng.integers(-4, 5, size=(n, n)) / 2.0
+    if rng.random() < 0.3 and n > 1:
+        A[:, n - 1] = A[:, 0]
+    ev = np.linalg.eigvals(A)
+    singular = bool(np.linalg.matrix_rank(A, tol=tol_for(A)) < n)
+    cases["detInv"].append({"rows": A.tolist(), "det": float(np.linalg.det(A)), "singular": singular,
+        "inv": None if singular else np.linalg.inv(A).tolist(),
+        "sv": np.linalg.svd(A, compute_uv=False).tolist(),
+        "eig": sorted([[float(z.real), float(abs(z.imag))] for z in ev])})
+cases["singularValues"] = []
+for _ in range(20):
+    m, n = int(rng.integers(1, 4)), int(rng.integers(1, 4))
+    A = rng.integers(-4, 5, size=(m, n)) / 2.0
+    cases["singularValues"].append({"rows": A.tolist(), "sv": np.linalg.svd(A, compute_uv=False).tolist()})
+cases["classify"] = []
+for _ in range(40):
+    m, n = int(rng.integers(1, 4)), int(rng.integers(1, 4))
+    A = rng.integers(-4, 5, size=(m, n)) / 2.0
+    if rng.random() < 0.5:
+        b = A @ (rng.integers(-4, 5, size=n) / 2.0)
+    else:
+        b = rng.integers(-4, 5, size=m) / 2.0
+    r = int(np.linalg.matrix_rank(A, tol=tol_for(A)))
+    rb = int(np.linalg.matrix_rank(np.column_stack([A, b]), tol=tol_for(np.column_stack([A, b]))))
+    kind = "none" if rb > r else ("unique" if r == n else "many")
+    cases["classify"].append({"rows": A.tolist(), "b": b.tolist(), "kind": kind})
+
 out = Path(__file__).with_name("fixtures.json")
 out.write_text(json.dumps({"generator": "numpy " + np.__version__, "seed": 20261104, **cases}, indent=1))
 print(f"wrote {out} · {sum(len(v) for v in cases.values())} cases")

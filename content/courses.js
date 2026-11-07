@@ -132,14 +132,27 @@
                 "title": "Shape vs solvability",
                 "refs": "Thm 1.1.1",
                 "interaction": "sampler",
-                "status": "placeholder"
+                "status": "placeholder",
+                "module": "js/viz/shape-solvability.js",
+                "source": "Lecture 2 · Thm 1.1.1",
+                "purpose_html": "Unique solvability of A<b>x</b> = <b>b</b> for every <b>b</b> forces a square matrix: tall A leaves <b>b</b> outside R(A) (no solution), wide A has N(A) ≠ {<b>0</b>} (many solutions), the consequences of Thm 1.1.1.",
+                "needs": [
+                  "katex",
+                  "three"
+                ]
               },
               {
                 "id": "2.3",
                 "title": "Invertibility dashboard",
                 "refs": "Cor 1.1.1",
                 "interaction": "indicator lights · morph slider",
-                "status": "placeholder"
+                "status": "placeholder",
+                "module": "js/viz/invertibility-dashboard.js",
+                "source": "Lecture 2 · Cor 1.1.1",
+                "purpose_html": "The six equivalent conditions of Cor 1.1.1 for a square A (R(A) = R<sup>n</sup>, independent columns, independent rows, N(A) = {<b>0</b>}, det A ≠ 0, 0 ∉ σ(A)) switch together, because they are one fact; near the singular point det, the smallest |λ| and A<sup>−1</sup> degenerate together.",
+                "needs": [
+                  "katex"
+                ]
               }
             ]
           },
