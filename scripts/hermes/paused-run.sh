@@ -48,7 +48,7 @@ save_paused() {
   local branch="$1" ids="$2" id
   git add -A
   git add -f logs/PAUSED.json
-  git commit -q -m "WIP $ids: paused at usage limit"
+  git diff --cached --quiet || git commit -q -m "WIP $ids: paused at usage limit"
   git push -q -u "$PAUSED_REMOTE" "$branch"
   for id in $(jq -r '[.items[] | select(.id != "toolkit") | .id] | join(" ")' logs/PAUSED.json); do
     git rev-parse -q --verify "refs/heads/viz/$id" >/dev/null && git push -q -f "$PAUSED_REMOTE" "viz/$id" || true

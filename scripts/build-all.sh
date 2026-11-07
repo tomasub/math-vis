@@ -77,6 +77,28 @@ for cmd in claude git jq node python3; do command -v "$cmd" >/dev/null || { echo
 BATCH="$(IFS=-; echo "${IDS[*]}")"
 mkdir -p logs
 
+# commit_changes <dir> <message> [path …] → stage everything (or just the paths) and commit only if
+# something is staged. An empty commit must never stop a run (set -e).
+commit_changes() {
+  local d="$1" m="$2"; shift 2
+  if [ $# -gt 0 ]; then git -C "$d" add -A -- "$@"; else git -C "$d" add -A; fi
+  git -C "$d" diff --cached --quiet || git -C "$d" commit -q -m "$m"
+}
+# toolkit_missing → ids whose toolkit phase has not happened yet. Done means: the manifest entry has
+# a module whose (stub) file exists, and a docs/plans/*.md named after a batch containing the id.
+# Local files only — no claude call.
+toolkit_missing() {
+  node -e '
+    const fs = require("fs"), m = require("./content/courses.js");
+    const plans = fs.existsSync("docs/plans") ? fs.readdirSync("docs/plans").filter((f) => f.endsWith(".md")) : [];
+    const planned = (id) => plans.some((f) => f.replace(/\.md$/, "").split("-").includes(id));
+    const entry = {};
+    for (const c of m.courses) for (const L of c.lectures) for (const v of L.visualisations) entry[v.id] = v;
+    const miss = process.argv.slice(1).filter((id) => { const v = entry[id];
+      return !(v && v.module && fs.existsSync(v.module) && planned(id)); });
+    console.log(miss.join(" "));' "${IDS[@]}"
+}
+
 # ---- resume after a usage limit -------------------------------------------
 # logs/PAUSED.json from an earlier run that covers an id asked for now → continue those ids where
 # they stopped. The file is moved to logs/RESUMED-<time>.json (kept for reference), so PAUSED.json
@@ -92,7 +114,8 @@ if [ -f logs/PAUSED.json ]; then
     cp logs/PAUSED.json "$RESUME"
     echo "== resuming after usage limit: $(jq -r '[.items[] | "\(.id)/\(.phase)"] | join(", ")' "$RESUME") (saved as ${RESUME#"$REPO"/})"
     if git ls-files --error-unmatch logs/PAUSED.json >/dev/null 2>&1; then # committed by a WIP commit
-      git rm -q logs/PAUSED.json && git commit -q -m "resume $BATCH after usage limit"
+      git rm -q logs/PAUSED.json
+      git diff --cached --quiet || git commit -q -m "resume $BATCH after usage limit"
     else
       rm -f logs/PAUSED.json
     fi
@@ -263,6 +286,11 @@ cycle() {
 $R_FIXES" true
             start=$((round + 1)) ;;
   esac
+  # a toolkit builder that changed nothing leaves nothing to review or commit
+  if [ "$id" = toolkit ] && [ "$phase" != review ] && [ "$phase" != fix ] && [ -z "$(git status --porcelain)" ]; then
+    C_VERDICT=unchanged; C_SUMMARY="the builder changed nothing"
+    return 0
+  fi
   for round in $(seq "$start" "$max"); do
     review "$lp-review-$round" "$id" "$round" "$rprompt"
     C_VERDICT="$R_VERDICT"; C_SUMMARY="$R_SUMMARY"
@@ -308,7 +336,7 @@ finish_pause() { # write logs/PAUSED.json, commit partial worktree work (never s
   for f in logs/PAUSED-*.json; do
     id=$(jq -r .id "$f"); wt=$(jq -r '.worktree // empty' "$f")
     if [ -n "$wt" ] && [ -d "$wt" ]; then
-      git -C "$wt" add -A && git -C "$wt" commit -q -m "WIP $id: paused at usage limit" || true
+      commit_changes "$wt" "WIP $id: paused at usage limit" || true
     fi
   done
   jq -s --arg batch "$BATCH" --argjson ids "$(printf '%s\n' "${IDS[@]}" | jq -R . | jq -sc .)" \
@@ -331,6 +359,8 @@ if $SKIP_TOOLKIT && [ -z "$(resume_get toolkit phase)" ]; then
   echo "== toolkit: skipped (--skip-toolkit)"
 elif [ -n "$RESUME" ] && [ -z "$(resume_get toolkit phase)" ]; then
   echo "== toolkit: done before the pause"
+elif [ -z "$(resume_get toolkit phase)" ] && [ -z "$(toolkit_missing)" ]; then
+  echo "== toolkit for $BATCH: nothing new needed, skipping"
 else
   st_set toolkit wt ""
   st_set toolkit session ""
@@ -338,14 +368,14 @@ else
     local br="build/toolkit-$BATCH"
     git rev-parse -q --verify "refs/heads/$br" >/dev/null && br="$br-$(date +%Y%m%d-%H%M%S)"
     git checkout -q -b "$br"
-    git add -A && git commit -q -m "toolkit for $BATCH (review inconclusive, see $R_LOG)" || true
+    commit_changes . "toolkit for $BATCH (review inconclusive, see $R_LOG)" || true
     echo "== toolkit for $BATCH: review inconclusive — $R_SUMMARY"
     echo "   log: $R_LOG"
     echo "   work committed on branch $br (you are on it). Read the log, then merge it or delete the branch."
     echo "   cost so far: \$$(sum_costs logs/toolkit-"$BATCH"-*.json)"
     exit 3
   }
-  echo "== toolkit for $BATCH: builder $BUILDER_MODEL, reviewer $REVIEWER_MODEL"
+  echo "== toolkit for $BATCH: builder $BUILDER_MODEL, reviewer $REVIEWER_MODEL (not prepared yet: $(toolkit_missing))"
   cycle toolkit "logs/toolkit-$BATCH" 2 \
     "Toolkit mode. Plan and build the shared toolkit, maths and manifest stubs for visualisations: ${IDS[*]}.
 Read their entries in docs/catalogue.md, check what already exists in js/toolkit, js/math and dev/gallery.html, then build only what is missing, in general form. Write the plan to docs/plans/$BATCH.md first. Add each visualisation's manifest entry with status \"placeholder\" and an empty stub file at its module path. Finish green on npm test, npm run fixtures and npm run smoke -- $(ready_ids) --no-shots. Do not build any visualisation logic." \
@@ -354,19 +384,22 @@ Read their entries in docs/catalogue.md, check what already exists in js/toolkit
   [ "$C_VERDICT" = none ] && tk_inconclusive
 
   tk_cost=$(sum_costs logs/toolkit-"$BATCH"-*.json)
-  if [ "$C_VERDICT" != "pass" ]; then
+  if [ "$C_VERDICT" = unchanged ]; then
+    echo "== toolkit for $BATCH: the builder changed nothing — no review, no commit · cost \$$tk_cost"
+  elif [ "$C_VERDICT" != "pass" ]; then
     echo "== toolkit FAILED: $C_SUMMARY (log: $R_LOG)"
     [ -n "$R_FIXES" ] && echo "$R_FIXES"
     echo "   cost so far: \$$tk_cost — tree left dirty for you to inspect."
     exit 1
-  fi
-  git add -A
-  if git diff --cached --quiet; then # e.g. the work is already in a "WIP … paused at usage limit" commit
-    git commit -q --allow-empty -m "toolkit for $BATCH (built by $BUILDER_MODEL, reviewed by $REVIEWER_MODEL)"
   else
-    git commit -q -m "toolkit for $BATCH (built by $BUILDER_MODEL, reviewed by $REVIEWER_MODEL)"
+    git add -A
+    if git diff --cached --quiet; then # e.g. already in a "WIP … paused at usage limit" commit
+      echo "== toolkit passed; nothing left to commit · cost \$$tk_cost"
+    else
+      git commit -q -m "toolkit for $BATCH (built by $BUILDER_MODEL, reviewed by $REVIEWER_MODEL)"
+      echo "== toolkit committed · cost \$$tk_cost"
+    fi
   fi
-  echo "== toolkit committed · cost \$$tk_cost"
 fi
 
 # ---- phase 3: one worktree per visualisation, N at a time ------------------
@@ -382,11 +415,11 @@ build_one() { # runs in a background job: build + review + fix rounds, inside th
     verdict="$C_VERDICT"; summary="$C_SUMMARY"
     if [ "$verdict" = none ]; then
       # keep the work: commit whatever the builder left uncommitted on its own branch
-      git add -A && git commit -q -m "viz $id: work in progress (review inconclusive, see $(basename "$R_LOG"))" || true
+      commit_changes . "viz $id: work in progress (review inconclusive, see $(basename "$R_LOG"))" || true
       verdict=inconclusive; summary="review inconclusive, log $(basename "$R_LOG")"
     fi
     # a passing review must never be lost: commit anything the builder left uncommitted
-    if [ "$verdict" = pass ]; then git add -A && git commit -q -m "viz $id: builder changes left uncommitted (review passed)" || true; fi
+    if [ "$verdict" = pass ]; then commit_changes . "viz $id: builder changes left uncommitted (review passed)" || true; fi
     echo "${R_LOG#"$REPO"/}" > "$REPO/logs/$id.reviewlog"
     echo "$summary" > "$REPO/logs/$id.summary"
     echo "$verdict" > "$REPO/logs/$id.verdict"   # written last: its presence means "finished"
@@ -433,14 +466,14 @@ for id in ${started[@]+"${started[@]}"}; do
   if [ "$verdict" = "inconclusive" ]; then
     rlog=$(cat "logs/$id.reviewlog" 2>/dev/null || echo "logs/$id-review-*.json")
     echo "- [ ] $id review inconclusive: work committed on $branch (worktree $wt), log $rlog" >> docs/progress.md
-    git add docs/progress.md && git commit -q -m "progress: $id review inconclusive"
+    commit_changes . "progress: $id review inconclusive" docs/progress.md
     echo "== $id: review inconclusive · log $rlog · work committed on $branch · \$$cost"
     continue
   fi
 
   if [ "$verdict" != "pass" ]; then
     echo "- [ ] $id BLOCKED after $MAX_ROUNDS reviews: $summary (branch $branch, worktree $wt)" >> docs/progress.md
-    git add docs/progress.md && git commit -q -m "progress: $id blocked"
+    commit_changes . "progress: $id blocked" docs/progress.md
     echo "== $id: BLOCKED · \$$cost · branch and worktree kept"
     continue
   fi
@@ -455,7 +488,7 @@ for id in ${started[@]+"${started[@]}"}; do
     if git diff --name-only --diff-filter=U | grep -q .; then
       git merge --abort || true
       echo "- [ ] $id BLOCKED: merge conflict (branch $branch, worktree $wt)" >> docs/progress.md
-      git add docs/progress.md && git commit -q -m "progress: $id blocked (merge conflict)"
+      commit_changes . "progress: $id blocked (merge conflict)" docs/progress.md
       echo "== $id: BLOCKED on merge conflict · \$$cost"
       continue
     fi
@@ -464,13 +497,13 @@ for id in ${started[@]+"${started[@]}"}; do
 
   if npm test >/dev/null 2>&1 && npm run smoke -- $(ready_ids) --no-shots >/dev/null 2>&1; then
     echo "- [x] $id (review rounds: $MAX_ROUNDS max), $summary" >> docs/progress.md
-    git add -A && git commit -q -m "progress: $id" || true
+    commit_changes . "progress: $id"
     git worktree remove --force "$wt" 2>/dev/null || true
     echo "== $id: merged and verified · \$$cost"
   else
     git reset --hard -q HEAD~1
     echo "- [ ] $id BLOCKED: merged but npm test / smoke failed (branch $branch, worktree $wt)" >> docs/progress.md
-    git add docs/progress.md && git commit -q -m "progress: $id blocked (checks failed after merge)"
+    commit_changes . "progress: $id blocked (checks failed after merge)" docs/progress.md
     echo "== $id: BLOCKED — checks failed after merge, reverted · \$$cost"
   fi
 done
