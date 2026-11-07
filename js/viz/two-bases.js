@@ -16,7 +16,7 @@
   var model = {
     A: A,
     initial: function () {
-      return { z: [0.5, 0.5], W: W0.map(function (r) { return r.slice(); }), showA: true, showW: true };
+      return { z: [-1, 0.5], W: W0.map(function (r) { return r.slice(); }), showA: true, showW: true };
     },
 
     /** Slider move: set coordinate i of z, clamping only that coordinate so y = Az stays in [−3, 3]³. */
@@ -73,10 +73,22 @@
 
     scene: function (s, d, onMove) {
       var sc = { dim: 3, extent: 3.5, step: 0.5, drops: false, planes: [], arrows: [], segments: [], dots: [], points: [], lines: [] };
-      sc.planes.push({ basis: A_COLS, color: 'accent', half: 3.6, grid: s.showA ? { range: 2, step: 1, color: 'q1' } : null });
-      if (d.valid) sc.planes.push({ basis: d.wc, color: 'q3', fill: false, half: 3.6, grid: s.showW ? { range: 2, step: 1, color: 'q3' } : null });
-      sc.arrows.push({ from: O, to: A_COLS[0], color: 'q1', label: 'a₁' }, { from: O, to: A_COLS[1], color: 'q2', label: 'a₂' });
-      sc.arrows.push({ from: O, to: d.wc[0], color: 'q3', label: 'w₁' }, { from: O, to: d.wc[1], color: 'q4', label: 'w₂' });
+      // Tint: orthonormal basis of R(A) (x₃ = 2x₁), half 3 keeps every corner inside [−3, 3]³.
+      var r5 = Math.sqrt(5);
+      sc.planes.push({ basis: [[0, 1, 0], [1 / r5, 0, 2 / r5]], color: 'accent', half: 3 });
+      // Grids: range chosen so every grid-line end stays inside the box (range·(‖u‖∞ + ‖v‖∞) ≤ 3).
+      var gridFor = function (u, v, color) {
+        var m = Math.max.apply(null, u.map(Math.abs)) + Math.max.apply(null, v.map(Math.abs));
+        var range = Math.min(1.5, 3 / m);
+        return { basis: [u, v], color: color, fill: false, half: 3, grid: { range: range, step: range / 3, color: color } };
+      };
+      if (s.showA) sc.planes.push(gridFor(A_COLS[0], A_COLS[1], 'q1'));
+      if (d.valid && s.showW) sc.planes.push(gridFor(d.wc[0], d.wc[1], 'q3'));
+      var same = function (u, v) { return Math.hypot(u[0] - v[0], u[1] - v[1], u[2] - v[2]) <= d.tol; };
+      var lab = [0, 1].map(function (j) { return same(A_COLS[j], d.wc[j]) ? 'a' + L.sub(j) + ' = w' + L.sub(j) : 'a' + L.sub(j); });
+      sc.arrows.push({ from: O, to: A_COLS[0], color: 'q1', label: lab[0] }, { from: O, to: A_COLS[1], color: 'q2', label: lab[1] });
+      sc.arrows.push({ from: O, to: d.wc[0], color: 'q3', label: same(A_COLS[0], d.wc[0]) ? null : 'w₁' },
+        { from: O, to: d.wc[1], color: 'q4', label: same(A_COLS[1], d.wc[1]) ? null : 'w₂' });
       var step = function (base, c1, c2, v1, v2, col1, col2) {
         var mid = base.map(function (b, l) { return b + c1 * v1[l]; });
         var end = mid.map(function (b, l) { return b + c2 * v2[l]; });
