@@ -1,0 +1,72 @@
+// 1.3 One subspace, two bases: model tests
+'use strict';
+const { test, near, assert } = require('../harness.js');
+const tb = require('../../js/viz/two-bases.js');
+const noop = () => {};
+const view = (s) => { const d = tb.derive(s); return { d, sc: tb.scene(s, d, noop), tex: tb.tex(s, d) }; };
+
+test('1.3 default: y in the plane, inside the axes, x = Mz from the notes', () => {
+  const s = tb.initial(); const { d, sc, tex } = view(s);
+  assert.deepEqual(d.y, [-0.5, -0.5, -1]);
+  assert.ok(Math.hypot(d.y[0] - 1, d.y[1] + 1, d.y[2] - 2) > 1.5, 'y clear of the a₂ tip');
+  assert.ok(Math.hypot(d.y[0] - 1, d.y[1], d.y[2] - 2) > 1.5, 'y clear of the a₁ tip');
+  assert.ok(d.y.every((v) => Math.abs(v) <= 3));
+  assert.equal(d.valid, true); assert.equal(d.isDefault, true);
+  near(d.x[0], s.z[0] + s.z[1], 0, 1e-12); near(d.x[1], -s.z[1], 0, 1e-12);
+  assert.equal(sc.planes.length, 3); assert.equal(sc.points.length, 1);
+  assert.deepEqual(sc.arrows.map((a) => a.label), ['a₁ = w₁', 'a₂', null, 'w₂']);
+  assert.equal(tex.convEq, 'x_1 = z_1 + z_2,\\quad x_2 = -z_2');
+});
+test('1.3 moveY projects a point off the plane back onto R(A)', () => {
+  const s = tb.initial(); const { z } = tb.moveY(s, [1, 1, 3]);
+  const y = tb.derive({ ...s, z }).y;
+  near(y[2], 2 * y[0], 0, 0.05);
+});
+test('1.3 setZ clamps only the moved coordinate', () => {
+  const s = { ...tb.initial(), z: [0.5, 0.5] };
+  assert.deepEqual(tb.setZ(s, [2, 0.5], 0).z, [1, 0.5]);
+  assert.deepEqual(tb.setZ(s, [0.5, 2], 1).z, [0.5, 1]);
+  assert.deepEqual(tb.setZ(s, [-2, 0.5], 0).z, [-2, 0.5]);
+  assert.ok(tb.derive({ ...s, z: tb.setZ(s, [2, 0.5], 0).z }).y.every((v) => Math.abs(v) <= 3 + 1e-9));
+});
+test('1.3 moveY keeps y inside the box', () => {
+  const { z } = tb.moveY(tb.initial(), [3, 3, 6]);
+  assert.ok(tb.derive({ ...tb.initial(), z }).y.every((v) => Math.abs(v) <= 3 + 1e-9));
+});
+test('1.3 grid toggles', () => {
+  const s = { ...tb.initial(), showA: false, showW: false };
+  const { sc } = view(s);
+  assert.equal(sc.planes.length, 1); assert.ok(!sc.planes[0].grid);
+  const on = view(tb.initial()).sc;
+  assert.ok(on.planes[1].grid && on.planes[2].grid);
+});
+test('1.3 dependent w: warning, x undefined, no W plane', () => {
+  const s = { ...tb.initial(), W: [[1, 2], [0, 0], [2, 4]] };
+  const { d, sc, tex } = view(s);
+  assert.equal(d.valid, false); assert.equal(d.x, null);
+  assert.ok(d.warnings[0].includes('dependent')); assert.ok(d.undef.startsWith('undefined'));
+  assert.equal(sc.planes.length, 2); assert.equal(tex.x, '');
+});
+test('1.3 w leaving the plane: warning', () => {
+  const s = { ...tb.initial(), W: [[1, 0], [0, 1], [0, 0]] };
+  const { d } = view(s);
+  assert.equal(d.valid, false); assert.deepEqual(d.inPlane, [false, true]);
+  assert.ok(d.warnings.some((w) => w.includes('w₁ is not in R(A)')));
+});
+test('1.3 another valid basis: W = A gives x = z', () => {
+  const s = { ...tb.initial(), W: [[1, 1], [0, -1], [2, 2]] };
+  const { d } = view(s);
+  assert.equal(d.valid, true); assert.equal(d.same, true); assert.equal(d.isDefault, false);
+});
+test('1.3 setW clamps entries', () => {
+  assert.equal(tb.setW(tb.initial(), 0, 0, 9).W[0][0], 3);
+});
+test('1.3 every plane corner and grid end stays inside [−3, 3]³', () => {
+  const { sc } = view(tb.initial());
+  for (const p of sc.planes) {
+    const [u, v] = p.basis, h = p.grid ? p.grid.range : p.half;
+    for (const a of [-1, 1]) for (const b of [-1, 1]) for (let l = 0; l < 3; l++) {
+      assert.ok(Math.abs(h * (a * u[l] + b * v[l])) <= 3 + 1e-9);
+    }
+  }
+});
