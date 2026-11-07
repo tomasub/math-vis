@@ -132,7 +132,7 @@
                 "title": "Shape vs solvability",
                 "refs": "Thm 1.1.1",
                 "interaction": "sampler",
-                "status": "placeholder",
+                "status": "ready",
                 "module": "js/viz/shape-solvability.js",
                 "source": "Lecture 2 · Thm 1.1.1",
                 "purpose_html": "Unique solvability for every <b>b</b> forces a square matrix (Thm 1.1.1): a tall A leaves some <b>b</b> outside R(A) (no solution), a wide A has N(A) ≠ {<b>0</b>} (many solutions whenever one exists).",
