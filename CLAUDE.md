@@ -86,6 +86,19 @@ open dev/gallery.html             # toolkit gallery
 
 Smoke needs Playwright once: `npm install && npx playwright install chromium`.
 
+**Exit code 75 = paused at a usage limit.** `scripts/build-all.sh` stops the whole batch as soon as a
+`claude -p` call hits a usage or rate limit (`scripts/claude-result.js`). It writes `logs/PAUSED.json`
+(id, phase build/review/fix, builder session, reset time) and prints
+`PAUSED (usage limit) at <id>/<phase>, resets <time>`. Nothing is stashed or marked BLOCKED, and the
+interrupted step doesn't count as a review round. Partial worktree work is committed as
+`WIP <id>: paused at usage limit`. To continue, run **the same command again** after the reset. It
+resumes each paused id where it stopped: it reuses the builder session with `--resume` if the session
+still exists, otherwise it starts a builder told the existing files are partial. Then it deletes
+`PAUSED.json`. `scripts/hermes/viz-batch.sh` handles 75 by committing everything as
+`WIP <ids>: paused at usage limit` on the build branch and pushing it, with no pull request. Its next
+run checks out that branch and continues the same ids, then opens the pull request as usual.
+Test without usage: `--simulate-limit build|review|fix` together with `--fake-review-output <log>`.
+
 ## How a batch is built
 
 `/build-visualisations <ids> [--parallel N]` runs three phases: a cheap **plan**
