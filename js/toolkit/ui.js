@@ -189,6 +189,26 @@
     </div>`;
   }
 
+  /**
+   * Indicator lights: props.items = [{ label, on, value }]. `on` true → lit (accent, ✓), false → unlit (warn, ✗),
+   * null/undefined → undetermined (muted, ?). `label` may be a string or vnode (e.g. a Tex); `value` is optional
+   * mono text shown after it (the number behind the light). State is also spelled out, not colour-only.
+   */
+  function Lights(props) {
+    return html`<ul class="lights" style="list-style:none;margin:0;padding:0;display:grid;gap:6px">
+      ${props.items.map(function (it) {
+        var st = it.on == null ? 'undetermined' : it.on ? 'true' : 'false';
+        var col = it.on == null ? 'var(--muted)' : it.on ? 'var(--accent)' : 'var(--warn)';
+        var glyph = it.on == null ? '?' : it.on ? '✓' : '✗';
+        return html`<li style="display:flex;align-items:center;gap:10px" data-state=${st}>
+          <span aria-hidden="true" style=${'flex:none;width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--bg);background:' + col + ';' + (it.on ? 'box-shadow:0 0 0 3px color-mix(in srgb, ' + col + ' 30%, transparent)' : 'opacity:.8')}>${glyph}</span>
+          <span style="flex:1">${it.label}<span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)"> : ${st}</span></span>
+          ${it.value != null && html`<span class="mono small muted">${it.value}</span>`}
+        </li>`;
+      })}
+    </ul>`;
+  }
+
   SV.ui = { html: html, useMerge: useMerge, useId: useId, Seg: Seg, Check: Check, Btn: Btn, Slider: Slider,
-    MatrixEditor: MatrixEditor, Panel: Panel, KV: KV, Tex: Tex, Chart: Chart, PredictReveal: PredictReveal, SplitBar: SplitBar, Player: Player };
+    MatrixEditor: MatrixEditor, Panel: Panel, KV: KV, Tex: Tex, Chart: Chart, PredictReveal: PredictReveal, SplitBar: SplitBar, Player: Player, Lights: Lights };
 })(window);
