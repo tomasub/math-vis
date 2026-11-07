@@ -6,7 +6,7 @@ const M = require('../../js/viz/dimension-split.js');
 const view = (s) => { const d = M.derive(s); return { d, i: M.scene(s, d, 'in'), o: M.scene(s, d, 'out'), tex: M.tex(s, d) }; };
 const plain = (tex) => tex.replace(/\\htmlClass\{q\d\}\{(\d)\}/g, '$1');
 
-test('2.1 default: 3×3 rank 2, N(A) = span(−1,−1,1)', () => {
+test('2.1 default (Example 1.1.2): 3×3 rank 2, N(A) = span(−1,−1,1)', () => {
   const { d, i, o } = view(M.initial());
   assert.equal(d.rank, 2); assert.equal(d.nullity, 1); assert.equal(d.theorem, true);
   const v = d.N[0]; near(v[0], v[1], 1e-9); near(v[0], -v[2], 1e-9);
@@ -18,8 +18,9 @@ test('2.1 animation: N(A) shrinks to 0, complement images grow and are independe
   assert.equal(i.arrows.length, 2); assert.equal(o.arrows.length, 2);
   assert.ok(d.nullMax < 1e-12); assert.equal(d.injective, true);
   const h = view({ ...M.initial(), t: 0.5 });
-  near(Math.hypot(...h.i.arrows[0].to), 1, 1e-9);
-  near(Math.hypot(...h.o.arrows[0].to), Math.hypot(...d.compImg[0]), 1e-9);
+  near(Math.hypot(...h.i.arrows[0].to), 0.5, 1e-9);
+  near(Math.hypot(...h.o.arrows[0].to), 0.5 * Math.hypot(...d.compImg[0]), 1e-9);
+  assert.equal(h.o.extent, 3.5, 'default output fits in the standard box');
 });
 test('2.1 rank slider gives exact rank and rank + nullity = n for every shape', () => {
   for (let m = 1; m <= 3; m++) for (let n = 1; n <= 3; n++) for (let r = 0; r <= Math.min(m, n); r++) {
@@ -55,4 +56,10 @@ test('2.1 output extent widens for large images; tex shows tol', () => {
   const { d, tex } = view({ ...M.initial(), ...M.setEntry(M.initial(), 0, 0, 20) });
   assert.ok(d.outExtent > 3.5);
   assert.ok(tex.tol.includes('10^{-10}')); assert.ok(tex.A.includes('3\\times 3'));
+});
+test('2.1 captions use superscripts: ℝ³ for n = 3', () => {
+  const { i, o } = view(M.initial());
+  assert.ok(i.aria.includes('ℝ³')); assert.ok(o.aria.includes('ℝ³'));
+  const w = view({ ...M.initial(), ...M.setShape(M.initial(), 2, 3) });
+  assert.ok(w.o.aria.includes('ℝ²'));
 });

@@ -4,7 +4,7 @@
 (function (root) {
   'use strict';
   var L = (root.SV && root.SV.linalg) || (typeof require !== 'undefined' ? require('../math/linalg.js') : null);
-  var SCALE = 2; // drawn length of the unit basis vectors
+  var SCALE = 1; // drawn length of the unit basis vectors (so images A·w stay within ‖A‖₂ ≤ 3 for the default)
 
   function pad3(v) { return [v[0] || 0, v[1] || 0, v[2] || 0]; }
   function scale(v, c) { return v.map(function (x) { return x * c; }); }
@@ -13,13 +13,13 @@
     for (var i = 0; i < m; i++) { out.push([]); for (var j = 0; j < n; j++) out[i].push(A[i] && A[i][j] != null ? A[i][j] : 0); }
     return out;
   }
-  function spaceName(d) { return 'ℝ' + L.sub(d); }
+  function spaceName(d) { return 'ℝ' + ['⁰', '¹', '²', '³'][d]; }
 
   /* ================= model ================= */
   var model = {
-    /** Default: 3×3 matrix of rank 2 (row 3 = row 1 + row 2), so N(A) is the line through (−1, −1, 1). */
+    /** Default: A of Example 1.1.2, 3×3 of rank 2 with N(A) = span[−1, −1, 1]ᵀ (σ = 3, √3, 0). */
     initial: function () {
-      return { m: 3, n: 3, A: [[1, 2, 3], [0, 1, 1], [1, 3, 4]], t: 0 };
+      return { m: 3, n: 3, A: [[1, 0, 1], [0, 2, 2], [-1, 1, 0]], t: 0 };
     },
 
     /** Change the shape; entries are kept where they exist, new ones are 0. */
@@ -168,8 +168,8 @@
             <${ui.KV} items=${[
               ['complement', 'N(A)⊥ (= row space). Any complement of N(A) works in the proof of Thm 1.1.1; this one is just a convenient choice.'],
               ['tol', html`<${ui.Tex} tex=${tex.tol} />`],
-              ['bases', 'orthonormal, computed by Gram–Schmidt; drawn with length 2'],
-              ['axes', 'ℝ³ and ℝ² within [−3, 3]; output axes widen if A·w is longer'],
+              ['bases', 'orthonormal, computed by Gram–Schmidt; drawn with length 1 (images A·w drawn at their true size)'],
+              ['axes', 'input axes run to ±3.5; the output axes widen beyond ±3.5 only if A·w is longer than that'],
             ]} />
           <//>
         </aside>
