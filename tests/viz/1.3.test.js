@@ -19,8 +19,15 @@ test('1.3 moveY projects a point off the plane back onto R(A)', () => {
   const y = tb.derive({ ...s, z }).y;
   near(y[2], 2 * y[0], 0, 0.05);
 });
-test('1.3 setZ clamps y into [−3, 3]³', () => {
-  const { z } = tb.setZ(tb.initial(), [2, 2]);
+test('1.3 setZ clamps only the moved coordinate', () => {
+  const s = tb.initial();
+  assert.deepEqual(tb.setZ(s, [2, 0.5], 0).z, [1, 0.5]);
+  assert.deepEqual(tb.setZ(s, [0.5, 2], 1).z, [0.5, 1]);
+  assert.deepEqual(tb.setZ(s, [-2, 0.5], 0).z, [-2, 0.5]);
+  assert.ok(tb.derive({ ...s, z: tb.setZ(s, [2, 0.5], 0).z }).y.every((v) => Math.abs(v) <= 3 + 1e-9));
+});
+test('1.3 moveY keeps y inside the box', () => {
+  const { z } = tb.moveY(tb.initial(), [3, 3, 6]);
   assert.ok(tb.derive({ ...tb.initial(), z }).y.every((v) => Math.abs(v) <= 3 + 1e-9));
 });
 test('1.3 grid toggles', () => {

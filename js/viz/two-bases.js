@@ -19,16 +19,26 @@
       return { z: [0.5, 0.5], W: W0.map(function (r) { return r.slice(); }), showA: true, showW: true };
     },
 
-    /** y = Az, kept inside the axis box [−3, 3]³ by shrinking z if needed. */
-    setZ: function (s, z) {
-      var y = L.applyRows(A, z), m = Math.max(Math.abs(y[0]), Math.abs(y[1]), Math.abs(y[2]));
-      var f = m > 3 ? 3 / m : 1;
-      return { z: [clean(z[0] * f), clean(z[1] * f)] };
+    /** Slider move: set coordinate i of z, clamping only that coordinate so y = Az stays in [−3, 3]³. */
+    setZ: function (s, z, i) {
+      var o = 1 - i, zo = s.z[o], lo = -Infinity, hi = Infinity;
+      for (var l = 0; l < 3; l++) {
+        var c = A[l][i], base = A[l][o] * zo;
+        if (Math.abs(c) < 1e-12) continue;
+        var u = (-3 - base) / c, v = (3 - base) / c;
+        lo = Math.max(lo, Math.min(u, v)); hi = Math.min(hi, Math.max(u, v));
+      }
+      var out = s.z.slice();
+      out[i] = lo > hi ? s.z[i] : Math.max(lo, Math.min(hi, z[i]));
+      out[i] = clean(out[i]);
+      return { z: out };
     },
-    /** Dragging: orthogonal projection of the world point v onto R(A) (3×2 system, exact), then setZ. */
+    /** Dragging: orthogonal projection of the world point v onto R(A) (3×2 system, exact); shrunk to fit the box. */
     moveY: function (s, v) {
       var r = L.coordsInBasis(A_COLS, v);
-      return r.z ? model.setZ(s, r.z) : {};
+      if (!r.z) return {};
+      var y = L.applyRows(A, r.z), m = Math.max(Math.abs(y[0]), Math.abs(y[1]), Math.abs(y[2])), f = m > 3 ? 3 / m : 1;
+      return { z: [clean(r.z[0] * f), clean(r.z[1] * f)] };
     },
     setW: function (s, i, j, x) {
       var W = s.W.map(function (r) { return r.slice(); });
@@ -156,9 +166,9 @@
             <${ui.MatrixEditor} value=${s.W} legend="W = [w₁, w₂]" name="w"
               onChange=${function (i, j, x) { set(function (o) { return model.setW(o, i, j, x); }); }} />
             <${ui.Slider} label="z₁" min="-2" max="2" step="0.05" value=${s.z[0]} display=${fmt(s.z[0])}
-              onInput=${function (v) { set(function (o) { return model.setZ(o, [v, o.z[1]]); }); }} />
+              onInput=${function (v) { set(function (o) { return model.setZ(o, [v, o.z[1]], 0); }); }} />
             <${ui.Slider} label="z₂" min="-2" max="2" step="0.05" value=${s.z[1]} display=${fmt(s.z[1])}
-              onInput=${function (v) { set(function (o) { return model.setZ(o, [o.z[0], v]); }); }} />
+              onInput=${function (v) { set(function (o) { return model.setZ(o, [o.z[0], v], 1); }); }} />
           <//>
           <${ui.Panel} title="Check yourself">
             <${ui.PredictReveal} prompt="Predict: for this y, is the coordinate vector x in basis {w₁, w₂} the same as z?"
