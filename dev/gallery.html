@@ -98,6 +98,9 @@
           <${ui.SplitBar} total=${3} parts=${[{ label: 'dim R(A)', value: 2, color: 'q1' }, { label: 'dim N(A)', value: 1, color: 'q2' }]} />
           <${ui.Player} value=${s.t || 0} onChange=${function (t) { set({ t: t }); }} />
           <code>ui.SplitBar · ui.Player</code></div>
+        <div class="demo"><h2>Lights</h2>
+          <${ui.Lights} items=${[{ label: 'det A ≠ 0', on: true, detail: '2.00' }, { label: '0 ∉ σ(A)', on: false, detail: '0' }]} />
+          <code>ui.Lights</code></div>
         <div class="demo"><h2>PredictReveal</h2>
           <${ui.PredictReveal} prompt="How many solutions does Ax = b have?"
             options=${[{ value: 0, label: '0' }, { value: 1, label: '1' }, { value: 'inf', label: '∞' }]}

@@ -189,6 +189,18 @@
     </div>`;
   }
 
+  /** Indicator lights: props.items = [{ label, on, detail }]; on → accent lamp, off → warn lamp. Also readable as text (✓/✗). */
+  function Lights(props) {
+    return html`<ul class="lights" style="list-style:none;margin:0;padding:0">
+      ${props.items.map(function (it) {
+        return html`<li style="display:flex;align-items:baseline;gap:8px;margin:4px 0" aria-label=${it.label + ': ' + (it.on ? 'true' : 'false')}>
+          <span aria-hidden="true" style=${'flex:none;width:14px;height:14px;border-radius:50%;border:1px solid var(--muted);background:' + (it.on ? 'var(--accent)' : 'var(--warn)') + ';align-self:center'}></span>
+          <span>${it.label}</span><span class="mono" style="margin-left:auto;font-size:13px;color:var(--muted)">${it.detail || ''} ${it.on ? '✓' : '✗'}</span>
+        </li>`;
+      })}
+    </ul>`;
+  }
+
   SV.ui = { html: html, useMerge: useMerge, useId: useId, Seg: Seg, Check: Check, Btn: Btn, Slider: Slider,
-    MatrixEditor: MatrixEditor, Panel: Panel, KV: KV, Tex: Tex, Chart: Chart, PredictReveal: PredictReveal, SplitBar: SplitBar, Player: Player };
+    MatrixEditor: MatrixEditor, Panel: Panel, KV: KV, Tex: Tex, Chart: Chart, PredictReveal: PredictReveal, SplitBar: SplitBar, Player: Player, Lights: Lights };
 })(window);

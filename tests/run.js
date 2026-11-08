@@ -77,6 +77,49 @@ test('randomRankMatrix has the requested rank', () => {
   for (const r of [0, 1, 2]) { const A = L.randomRankMatrix(3, 2, r); assert.equal(L.splitInputSpace(A).rank, r); }
 });
 
+fx.invDash.forEach((c, i) => test(`det/inverse/singularValues/eigenvalues #${i} vs numpy`, () => {
+  near(L.det(c.rows), c.det, 1e-9, 1e-9);
+  const sv = L.singularValues(c.rows);
+  assert.equal(sv.length, c.sv.length);
+  sv.forEach((v, j) => near(v, c.sv[j], 1e-9, 1e-12));
+  const ev = L.eigenvalues(c.rows).map((z) => [z.re, z.im]);
+  assert.equal(ev.length, c.eig.length);
+  const rho = Math.max(...c.eig.map((z) => Math.hypot(z[0], z[1])));
+  c.eig.forEach((r) => {
+    const k = ev.findIndex((e) => Math.hypot(e[0] - r[0], e[1] - r[1]) <= (Math.hypot(r[0], r[1]) <= 1e-13 * rho ? 1e-13 * rho : c.eigTol * Math.hypot(r[0], r[1])));
+    assert.ok(k >= 0, 'eig ' + r + ' in ' + JSON.stringify(ev));
+    ev.splice(k, 1);
+  });
+  const inv = L.inverse(c.rows);
+  if (c.inv) { assert.ok(inv); inv.forEach((row, a) => row.forEach((v, b) => near(v, c.inv[a][b], 1e-8, 1e-8))); }
+  else assert.equal(inv, null);
+}));
+fx.svRect.forEach((c, i) => test(`singularValues #${i} (${c.rows.length}×${c.rows[0].length}) returns min(m,n) values vs numpy`, () => {
+  const sv = L.singularValues(c.rows);
+  assert.equal(sv.length, c.sv.length);
+  sv.forEach((v, j) => near(v, c.sv[j], 1e-9, 1e-12));
+}));
+test('eigenvalues: named cases from the review', () => {
+  const re = (M) => L.eigenvalues(M);
+  const a = re([[1, 1], [0, 1 + 1e-10]]);
+  a.forEach((z) => assert.equal(z.im, 0));
+  assert.deepEqual(a.map((z) => z.re).sort(), [1, 1 + 1e-10].sort());
+  re([[2, 0, 0], [0, 2, 0], [0, 0, 2]]).forEach((z) => { assert.equal(z.im, 0); near(z.re, 2, 1e-12, 0); });
+  const d = re([[1e6, 0], [0, 1e-6]]).map((z) => z.re).sort((x, y) => x - y);
+  near(d[0], 1e-6, 1e-12, 0); near(d[1], 1e6, 1e-12, 0);
+});
+test('inverse: decided at the project tol, agrees with analyse', () => {
+  assert.equal(L.inverse([[1e-12, 0], [0, 1e-12]]), null);
+  assert.ok(L.inverse([[1, 2], [2, 4 + 1e-6]]));
+  assert.equal(L.inverse([[1, 2], [2, 4 + 1e-12]]), null);
+});
+fx.classifyRhs.forEach((c, i) => test(`classifyRhs #${i} vs numpy ranks at tol`, () => {
+  assert.equal(L.classifyRhs(c.rows, c.b).status, c.status);
+}));
+test('sampleBall stays inside the ball', () => {
+  L.sampleBall(3, 200, 2).forEach((p) => assert.ok(L.norm(p) <= 2 + 1e-12));
+});
+
 /* ---------- 2. edge cases and formatting ---------- */
 test('k > n forces dependence', () => assert.equal(L.relationText(L.analyse([[1, 0], [0, 1], [2, -1]]).rel), 'q₃ = 2q₁ − q₂'));
 test('zero vector', () => assert.equal(L.relationText(L.analyse([[0, 0]]).rel), 'q₁ = 0'));

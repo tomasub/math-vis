@@ -132,14 +132,27 @@
                 "title": "Shape vs solvability",
                 "refs": "Thm 1.1.1",
                 "interaction": "sampler",
-                "status": "placeholder"
+                "status": "placeholder",
+                "module": "js/viz/shape-solvability.js",
+                "source": "Lecture 2 · Thm 1.1.1",
+                "purpose_html": "Unique solvability of <i>A</i><b>x</b> = <b>b</b> for every <b>b</b> requires a square matrix (consequence of Thm 1.1.1): a tall <i>A</i> leaves <b>b</b> outside R(<i>A</i>) for almost every <b>b</b>, a wide <i>A</i> has N(<i>A</i>) &ne; {<b>0</b>}, so solutions are never unique.",
+                "needs": [
+                  "katex",
+                  "three"
+                ]
               },
               {
                 "id": "2.3",
                 "title": "Invertibility dashboard",
                 "refs": "Cor 1.1.1",
                 "interaction": "indicator lights · morph slider",
-                "status": "placeholder"
+                "status": "placeholder",
+                "module": "js/viz/invertibility-dashboard.js",
+                "source": "Lecture 2 · Cor 1.1.1",
+                "purpose_html": "The six conditions of Cor 1.1.1 (R(<i>A</i>) = R<sup>n</sup>, independent columns, independent rows, N(<i>A</i>) = {<b>0</b>}, det <i>A</i> &ne; 0, 0 &notin; &sigma;(<i>A</i>)) switch together because they are one fact; near the singular point det, the smallest eigenvalue and <i>A</i><sup>-1</sup> degenerate together.",
+                "needs": [
+                  "katex"
+                ]
               }
             ]
           },

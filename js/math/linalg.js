@@ -398,9 +398,221 @@
     return null;
   }
 
+  /** Determinant of a square matrix (array of rows) by LU with partial pivoting. */
+  function det(M) {
+    const n = M.length, A = M.map((r) => r.slice());
+    let d = 1;
+    for (let k = 0; k < n; k++) {
+      let p = k;
+      for (let i = k + 1; i < n; i++) if (Math.abs(A[i][k]) > Math.abs(A[p][k])) p = i;
+      if (A[p][k] === 0) return 0;
+      if (p !== k) { [A[p], A[k]] = [A[k], A[p]]; d = -d; }
+      d *= A[k][k];
+      for (let i = k + 1; i < n; i++) {
+        const f = A[i][k] / A[k][k];
+        for (let j = k; j < n; j++) A[i][j] -= f * A[k][j];
+      }
+    }
+    return d;
+  }
+
+  /**
+   * Inverse of a square matrix (rows) by Gauss–Jordan with partial pivoting. Returns null when A is
+   * singular at the project tolerance, i.e. analyse(columns of A).rank < n (tol = 1e-10·max(1, ‖A‖₂)).
+   */
+  function inverse(M) {
+    const n = M.length;
+    const cols = Array.from({ length: n }, (_, j) => M.map((r) => r[j]));
+    if (analyse(cols).rank < n) return null;
+    const A = M.map((r, i) => r.concat(Array.from({ length: n }, (_, j) => (i === j ? 1 : 0))));
+    for (let k = 0; k < n; k++) {
+      let p = k;
+      for (let i = k + 1; i < n; i++) if (Math.abs(A[i][k]) > Math.abs(A[p][k])) p = i;
+      if (A[p][k] === 0) return null;
+      [A[p], A[k]] = [A[k], A[p]];
+      const pv = A[k][k];
+      for (let j = 0; j < 2 * n; j++) A[k][j] /= pv;
+      for (let i = 0; i < n; i++) {
+        if (i === k) continue;
+        const f = A[i][k];
+        if (f !== 0) for (let j = 0; j < 2 * n; j++) A[i][j] -= f * A[k][j];
+      }
+    }
+    return A.map((r) => r.slice(n));
+  }
+
+  /** Singular values (descending) of an m×n matrix (rows) by one-sided Jacobi: accurate for tiny σ_min. */
+  function singularValues(input) {
+    // Returns min(m, n) values: work on the transpose when the matrix is wide.
+    const rows = input.length < input[0].length ? input[0].map((_, j) => input.map((r) => r[j])) : input;
+    const m = rows.length, n = rows[0].length;
+    const U = Array.from({ length: n }, (_, j) => rows.map((r) => r[j]));
+    for (let sweep = 0; sweep < 60; sweep++) {
+      let rot = false;
+      for (let p = 0; p < n - 1; p++) for (let q = p + 1; q < n; q++) {
+        const a = dot(U[p], U[p]), b = dot(U[q], U[q]), g = dot(U[p], U[q]);
+        if (Math.abs(g) <= 1e-15 * Math.sqrt(a * b) || g === 0) continue;
+        rot = true;
+        const z = (b - a) / (2 * g), tt = Math.sign(z || 1) / (Math.abs(z) + Math.sqrt(1 + z * z));
+        const c = 1 / Math.sqrt(1 + tt * tt), sn = c * tt;
+        for (let i = 0; i < m; i++) {
+          const up = U[p][i], uq = U[q][i];
+          U[p][i] = c * up - sn * uq; U[q][i] = sn * up + c * uq;
+        }
+      }
+      if (!rot) break;
+    }
+    return U.map(norm).sort((x, y) => y - x);
+  }
+
+  /**
+   * Roots of the polynomial with coefficients c (highest degree first, c[0] ≠ 0), degree ≤ 4,
+   * as [{re, im}], by Durand–Kerner followed by Newton polishing. Real roots get im = 0 exactly
+   * when |im| ≤ 1e-9·(1+|re|).
+   */
+  function polyRoots(c) {
+    const n = c.length - 1;
+    if (n < 1) return [];
+    const a = c.map((x) => x / c[0]);
+    const mul = (x, y) => ({ re: x.re * y.re - x.im * y.im, im: x.re * y.im + x.im * y.re });
+    const dv = (x, y) => { const d = y.re * y.re + y.im * y.im; return { re: (x.re * y.re + x.im * y.im) / d, im: (x.im * y.re - x.re * y.im) / d }; };
+    const horner = (z) => { let r = { re: 1, im: 0 }; for (let k = 1; k <= n; k++) { r = mul(r, z); r.re += a[k]; } return r; };
+    const R = 1 + Math.max(...a.slice(1).map(Math.abs));
+    let z = Array.from({ length: n }, (_, k) => ({ re: R * 0.7 * Math.cos(0.4 + 2 * Math.PI * k / n), im: R * 0.7 * Math.sin(0.4 + 2 * Math.PI * k / n) }));
+    for (let it = 0; it < 500; it++) {
+      let delta = 0;
+      z = z.map((zi, i) => {
+        let den = { re: 1, im: 0 };
+        z.forEach((zj, j) => { if (j !== i) den = mul(den, { re: zi.re - zj.re, im: zi.im - zj.im }); });
+        const step = dv(horner(zi), den);
+        delta = Math.max(delta, Math.hypot(step.re, step.im));
+        return { re: zi.re - step.re, im: zi.im - step.im };
+      });
+      if (delta < 1e-15 * R) break;
+    }
+    const dpoly = (zz) => { // p'(z) by Horner on the derivative
+      let r = { re: n, im: 0 };
+      for (let k = 1; k < n; k++) { r = mul(r, zz); r.re += (n - k) * a[k]; }
+      return r;
+    };
+    z = z.map((zi) => {
+      for (let it = 0; it < 5; it++) {
+        const d = dpoly(zi);
+        if (d.re === 0 && d.im === 0) break;
+        const st = dv(horner(zi), d);
+        if (!isFinite(st.re + st.im)) break;
+        zi = { re: zi.re - st.re, im: zi.im - st.im };
+      }
+      return zi;
+    });
+    return z.map((r) => (Math.abs(r.im) <= 1e-9 * (1 + Math.abs(r.re)) ? { re: r.re, im: 0 } : r));
+  }
+
+  /** Characteristic polynomial coefficients (highest degree first) of a square matrix, Faddeev–LeVerrier. */
+  function charPoly(M) {
+    const n = M.length;
+    let Mk = M.map((r) => r.map(() => 0));
+    const coef = [1];
+    for (let k = 1; k <= n; k++) {
+      const AM = M.map((r) => Array.from({ length: n }, (_, j) => r.reduce((s, v, l) => s + v * Mk[l][j], 0)));
+      Mk = AM.map((r, i) => r.map((v, j) => v + (i === j ? coef[k - 1] : 0)));
+      const AMk = M.map((r) => Array.from({ length: n }, (_, j) => r.reduce((s, v, l) => s + v * Mk[l][j], 0)));
+      let tr = 0; for (let i = 0; i < n; i++) tr += AMk[i][i];
+      coef.push(-tr / k);
+    }
+    return coef;
+  }
+
+  /** Closed-form eigenvalues of [[a,b],[c,d]]: cancellation-free (larger root first, the other = det/λ₁). */
+  function eig2(a, b, c, d) {
+    const m = (a + d) / 2, disc = ((a - d) / 2) * ((a - d) / 2) + b * c;
+    if (disc < 0) { const w = Math.sqrt(-disc); return [{ re: m, im: w }, { re: m, im: -w }]; }
+    const sq = Math.sqrt(disc);
+    const l1 = m >= 0 ? m + sq : m - sq;
+    const l2 = l1 !== 0 ? (a * d - b * c) / l1 : 0;
+    return [{ re: l1, im: 0 }, { re: l2, im: 0 }];
+  }
+
+  /** Householder QR of a k×k matrix; returns { Q, R } (arrays of rows). */
+  function qrHouseholder(A) {
+    const k = A.length, R = A.map((r) => r.slice());
+    const Q = Array.from({ length: k }, (_, i) => Array.from({ length: k }, (_, j) => (i === j ? 1 : 0)));
+    for (let c = 0; c < k - 1; c++) {
+      const x = []; for (let i = c; i < k; i++) x.push(R[i][c]);
+      const nx = norm(x);
+      if (nx === 0) continue;
+      const v = x.slice(); v[0] += (x[0] >= 0 ? 1 : -1) * nx;
+      const vn = dot(v, v);
+      if (vn === 0) continue;
+      for (let j = 0; j < k; j++) { let sd = 0; for (let i = c; i < k; i++) sd += v[i - c] * R[i][j]; sd = 2 * sd / vn; for (let i = c; i < k; i++) R[i][j] -= sd * v[i - c]; }
+      for (let i = 0; i < k; i++) { let sd = 0; for (let j = c; j < k; j++) sd += Q[i][j] * v[j - c]; sd = 2 * sd / vn; for (let j = c; j < k; j++) Q[i][j] -= sd * v[j - c]; }
+    }
+    return { Q, R };
+  }
+
+  /**
+   * Eigenvalues σ(A) of a square matrix of order ≤ 4 as [{re, im}]. n = 2: cancellation-free closed
+   * form. n = 3, 4: shifted QR iteration (Householder QR, Wilkinson-type shift) with deflation of
+   * 1×1 and 2×2 trailing blocks (2×2 blocks by the closed form, so complex pairs are exact conjugates);
+   * if an iteration cap is hit the remaining block falls back to polyRoots of its characteristic polynomial.
+   */
+  function eigenvalues(M) {
+    const n = M.length;
+    if (n === 1) return [{ re: M[0][0], im: 0 }];
+    if (n === 2) return eig2(M[0][0], M[0][1], M[1][0], M[1][1]);
+    let A = M.map((r) => r.slice());
+    const out = [];
+    const fro = Math.sqrt(A.reduce((s, r) => s + dot(r, r), 0));
+    const eps = 1e-15 * (fro || 1);
+    let k = n, iter = 0;
+    const decoupled = (s) => { for (let i = k - s; i < k; i++) for (let j = 0; j < k - s; j++) if (Math.abs(A[i][j]) > eps) return false; return true; };
+    while (k > 0) {
+      if (k === 1) { out.push({ re: A[0][0], im: 0 }); break; }
+      if (k === 2) { out.push(...eig2(A[0][0], A[0][1], A[1][0], A[1][1])); break; }
+      if (decoupled(1)) { out.push({ re: A[k - 1][k - 1], im: 0 }); k--; A = A.slice(0, k).map((r) => r.slice(0, k)); iter = 0; continue; }
+      if (decoupled(2)) {
+        out.push(...eig2(A[k - 2][k - 2], A[k - 2][k - 1], A[k - 1][k - 2], A[k - 1][k - 1]));
+        k -= 2; A = A.slice(0, k).map((r) => r.slice(0, k)); iter = 0; continue;
+      }
+      if (++iter > 500) { out.push(...polyRoots(charPoly(A))); break; }
+      const t = eig2(A[k - 2][k - 2], A[k - 2][k - 1], A[k - 1][k - 2], A[k - 1][k - 1]);
+      let mu = 0;
+      if (t[0].im === 0) mu = Math.abs(t[0].re - A[k - 1][k - 1]) <= Math.abs(t[1].re - A[k - 1][k - 1]) ? t[0].re : t[1].re;
+      if (iter % 11 === 10) mu += fro * 0.37; // exceptional shift against stagnation
+      const S = A.map((r, i) => r.map((v, j) => v - (i === j ? mu : 0)));
+      const { Q, R } = qrHouseholder(S);
+      A = R.map((r) => Array.from({ length: k }, (_, j) => r.reduce((sum, v, l) => sum + v * Q[l][j], 0))).map((r, i) => r.map((v, j) => v + (i === j ? mu : 0)));
+    }
+    return out;
+  }
+
+  /**
+   * Classifies the system A x = b (A rows): 'unique' (consistent, rank = n), 'many' (consistent,
+   * rank < n) or 'none' (rank [A|b] > rank A), with ranks decided by analyse() at tol.
+   */
+  function classifyRhs(rows, b) {
+    const n = rows[0].length;
+    const cols = []; for (let j = 0; j < n; j++) cols.push(rows.map((r) => r[j]));
+    const rA = analyse(cols);
+    const rAb = analyse(cols.concat([b]));
+    const status = rAb.rank > rA.rank ? 'none' : (rA.rank === n ? 'unique' : 'many');
+    return { status, rank: rA.rank, rankAug: rAb.rank, tol: rA.tol };
+  }
+
+  /** k points uniform in the closed ball of radius `radius` in ℝ^dim; rand() ∈ [0,1) (default Math.random). */
+  function sampleBall(dim, k, radius, rand) {
+    const rnd = rand || Math.random, out = [];
+    const gauss = () => Math.sqrt(-2 * Math.log(1 - rnd())) * Math.cos(2 * Math.PI * rnd());
+    for (let i = 0; i < k; i++) {
+      const g = Array.from({ length: dim }, gauss), nn = norm(g) || 1, rr = (radius == null ? 1 : radius) * Math.pow(rnd(), 1 / dim);
+      out.push(g.map((x) => x / nn * rr));
+    }
+    return out;
+  }
+
   const api = {
     TOL_FACTOR, dot, norm, jacobiEig, norm2, analyse, fmt, fmtE, sub, relationText, relationTex, fmtTex, fmtETex,
-    applyRows, coordsInBasis, splitInputSpace, randomRankMatrix, projectOntoBasis, completeOrthonormalBasis, gaussianSolve, minNormSolve, niceBasis,
+    applyRows, coordsInBasis, splitInputSpace, randomRankMatrix, det, inverse, singularValues, polyRoots, eigenvalues, classifyRhs, sampleBall, projectOntoBasis, completeOrthonormalBasis, gaussianSolve, minNormSolve, niceBasis,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.SV = root.SV || {};
