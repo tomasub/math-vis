@@ -398,9 +398,151 @@
     return null;
   }
 
+  /** Determinant of a square matrix (array of rows), Gaussian elimination with partial pivoting. */
+  function det(rows) {
+    const n = rows.length;
+    const A = rows.map((r) => r.slice());
+    let d = 1;
+    for (let c = 0; c < n; c++) {
+      let p = c;
+      for (let r = c + 1; r < n; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r;
+      if (A[p][c] === 0) return 0;
+      if (p !== c) { [A[p], A[c]] = [A[c], A[p]]; d = -d; }
+      d *= A[c][c];
+      for (let r = c + 1; r < n; r++) {
+        const f = A[r][c] / A[c][c];
+        for (let k = c; k < n; k++) A[r][k] -= f * A[c][k];
+      }
+    }
+    return d;
+  }
+
+  /**
+   * Singular values (descending) of an m×n matrix (array of rows) by one-sided Jacobi
+   * (Hestenes), which keeps small singular values accurate (no AᵀA squaring).
+   */
+  function singularValues(rows) {
+    const m = rows.length, n = m ? rows[0].length : 0;
+    // work on the orientation with fewer columns
+    let U = [];
+    if (m >= n) for (let j = 0; j < n; j++) U.push(rows.map((r) => r[j]));
+    else U = rows.map((r) => r.slice());
+    const k = U.length;
+    for (let sweep = 0; sweep < 60; sweep++) {
+      let rotated = false;
+      for (let p = 0; p < k; p++) for (let q = p + 1; q < k; q++) {
+        const a = dot(U[p], U[p]), b = dot(U[q], U[q]), g = dot(U[p], U[q]);
+        if (g === 0 || Math.abs(g) <= 1e-15 * Math.sqrt(a * b)) continue;
+        rotated = true;
+        const zeta = (b - a) / (2 * g);
+        const t = (zeta >= 0 ? 1 : -1) / (Math.abs(zeta) + Math.sqrt(1 + zeta * zeta));
+        const c = 1 / Math.sqrt(1 + t * t), s = c * t;
+        for (let i = 0; i < U[p].length; i++) {
+          const up = U[p][i], uq = U[q][i];
+          U[p][i] = c * up - s * uq;
+          U[q][i] = s * up + c * uq;
+        }
+      }
+      if (!rotated) break;
+    }
+    return U.map(norm).sort((x, y) => y - x);
+  }
+
+  /**
+   * Inverse of a square matrix (array of rows) by Gauss–Jordan with partial pivoting.
+   * Returns null when A is singular to tol = 1e-10·max(1, ‖A‖₂) (smallest singular value ≤ tol).
+   */
+  function inverse(rows) {
+    const n = rows.length;
+    const sv = singularValues(rows);
+    if (n === 0 || sv[n - 1] <= TOL_FACTOR * Math.max(1, sv[0])) return null;
+    const A = rows.map((r, i) => r.concat(Array.from({ length: n }, (_, j) => (i === j ? 1 : 0))));
+    for (let c = 0; c < n; c++) {
+      let p = c;
+      for (let r = c + 1; r < n; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r;
+      if (A[p][c] === 0) return null;
+      [A[p], A[c]] = [A[c], A[p]];
+      const piv = A[c][c];
+      for (let k = 0; k < 2 * n; k++) A[c][k] /= piv;
+      for (let r = 0; r < n; r++) {
+        if (r === c) continue;
+        const f = A[r][c];
+        if (f !== 0) for (let k = 0; k < 2 * n; k++) A[r][k] -= f * A[c][k];
+      }
+    }
+    return A.map((r) => r.slice(n));
+  }
+
+  /**
+   * Eigenvalues (possibly complex) of a 1×1, 2×2 or 3×3 matrix (array of rows) as [{re, im}],
+   * sorted by |λ| ascending (then re). 2×2 uses the closed form; 3×3 finds one real root of the
+   * characteristic cubic (bisection on a Cauchy bound + Newton polish) and solves the deflated quadratic.
+   */
+  function eigenvaluesSmall(rows) {
+    const n = rows.length;
+    const quad = (b, c) => { // roots of x² + b x + c
+      const disc = b * b - 4 * c;
+      if (disc >= 0) {
+        const sq = Math.sqrt(disc);
+        const q = -0.5 * (b + (b >= 0 ? sq : -sq)); // stable
+        const r1 = q, r2 = q !== 0 ? c / q : 0;
+        return [{ re: r1, im: 0 }, { re: r2, im: 0 }];
+      }
+      const sq = Math.sqrt(-disc) / 2;
+      return [{ re: -b / 2, im: sq }, { re: -b / 2, im: -sq }];
+    };
+    let ev;
+    if (n === 1) ev = [{ re: rows[0][0], im: 0 }];
+    else if (n === 2) ev = quad(-(rows[0][0] + rows[1][1]), det(rows));
+    else if (n === 3) {
+      const tr = rows[0][0] + rows[1][1] + rows[2][2];
+      const minors = rows[1][1] * rows[2][2] - rows[1][2] * rows[2][1]
+        + rows[0][0] * rows[2][2] - rows[0][2] * rows[2][0]
+        + rows[0][0] * rows[1][1] - rows[0][1] * rows[1][0];
+      const a = -tr, b = minors, c = -det(rows); // λ³ + aλ² + bλ + c
+      const f = (x) => ((x + a) * x + b) * x + c;
+      const df = (x) => (3 * x + 2 * a) * x + b;
+      const R = 1 + Math.max(Math.abs(a), Math.abs(b), Math.abs(c));
+      let lo = -R, hi = R;
+      for (let i = 0; i < 200; i++) { const mid = (lo + hi) / 2; if (f(mid) > 0) hi = mid; else lo = mid; }
+      let x = (lo + hi) / 2;
+      for (let i = 0; i < 3; i++) { const d = df(x); if (d !== 0) x -= f(x) / d; }
+      ev = [{ re: x, im: 0 }].concat(quad(a + x, c !== 0 && x !== 0 ? -c / x : b + x * (a + x)));
+    } else throw new Error('eigenvaluesSmall: n ≤ 3 only');
+    return ev.sort((p, q) => Math.hypot(p.re, p.im) - Math.hypot(q.re, q.im) || p.re - q.re);
+  }
+
+  /** Uniform sample from the closed ball of radius `radius` (default 1) in ℝ^dim; rand() ∈ [0,1) (default Math.random). */
+  function sampleInBall(dim, radius, rand) {
+    const rnd = rand || Math.random;
+    const g = [];
+    for (let i = 0; i < dim; i++) {
+      const u = 1 - rnd(), v = rnd();
+      g.push(Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v));
+    }
+    const nn = norm(g) || 1;
+    const rad = (radius == null ? 1 : radius) * Math.pow(rnd(), 1 / dim);
+    return g.map((x) => (x / nn) * rad);
+  }
+
+  /**
+   * Classifies A x = b for A given by rows (m×n) with Lemma 1.1.1: existence ⇔ b ∈ R(A), uniqueness ⇔ N(A) = {0}.
+   * Returns { kind: 'unique' | 'many' | 'none', dist, rank, tol } where dist = ‖b − P_{R(A)} b‖₂ and
+   * b ∈ R(A) iff dist ≤ tol·max(1, ‖b‖).
+   */
+  function classifySolvability(rows, b) {
+    const n = rows.length ? rows[0].length : 0;
+    const cols = []; for (let j = 0; j < n; j++) cols.push(rows.map((r) => r[j]));
+    const an = analyse(cols);
+    const dist = projectOntoBasis(an.E, b).residual;
+    const inR = dist <= an.tol * Math.max(1, norm(b));
+    return { kind: !inR ? 'none' : an.rank === n ? 'unique' : 'many', dist, rank: an.rank, tol: an.tol };
+  }
+
   const api = {
     TOL_FACTOR, dot, norm, jacobiEig, norm2, analyse, fmt, fmtE, sub, relationText, relationTex, fmtTex, fmtETex,
     applyRows, coordsInBasis, splitInputSpace, randomRankMatrix, projectOntoBasis, completeOrthonormalBasis, gaussianSolve, minNormSolve, niceBasis,
+    det, singularValues, inverse, eigenvaluesSmall, sampleInBall, classifySolvability,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.SV = root.SV || {};

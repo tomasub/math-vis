@@ -171,6 +171,39 @@ for _ in range(25):
     r = int(np.linalg.matrix_rank(A, tol=tol_for(A)))
     cases["splitInput"].append({"rows": A.tolist(), "rank": r, "nullity": n - r})
 
+# 2.2 / 2.3: det, inverse, singular values, eigenvalues (square 1..3), solvability class
+cases["invertibility"] = []
+for _ in range(30):
+    n = int(rng.integers(2, 4))
+    A = rng.integers(-6, 7, size=(n, n)) / 2.0
+    if rng.random() < 0.3:
+        A[:, n - 1] = A[:, 0] * rng.choice([-1, 0.5, 2])
+    ev = np.linalg.eigvals(A)
+    ev = sorted(ev, key=lambda z: (round(abs(z), 9), round(z.real, 9)))
+    sv = np.linalg.svd(A, compute_uv=False).tolist()
+    sing = bool(sv[-1] <= 1e-10 * max(1, sv[0]))
+    cases["invertibility"].append({"rows": A.tolist(), "det": float(np.linalg.det(A)), "sv": sv,
+        "eig": [[float(z.real), float(z.imag)] for z in ev], "singular": sing,
+        "inv": None if sing else np.linalg.inv(A).tolist()})
+cases["svRect"] = []
+for _ in range(20):
+    m, n = int(rng.integers(1, 4)), int(rng.integers(1, 4))
+    A = rng.integers(-6, 7, size=(m, n)) / 2.0
+    cases["svRect"].append({"rows": A.tolist(), "sv": np.linalg.svd(A, compute_uv=False).tolist()})
+cases["classify"] = []
+for _ in range(40):
+    m, n = int(rng.integers(1, 4)), int(rng.integers(1, 4))
+    A = rng.integers(-4, 5, size=(m, n)) / 2.0
+    r = int(np.linalg.matrix_rank(A, tol=tol_for(A)))
+    if rng.random() < 0.5:
+        b = A @ (rng.integers(-4, 5, size=n) / 2.0)
+    else:
+        b = rng.integers(-4, 5, size=m) / 2.0
+    res = np.linalg.norm(b - A @ np.linalg.lstsq(A, b, rcond=None)[0])
+    inr = bool(res <= tol_for(A) * max(1, np.linalg.norm(b)) + 1e-12)
+    kind = "none" if not inr else ("unique" if r == n else "many")
+    cases["classify"].append({"rows": A.tolist(), "b": b.tolist(), "kind": kind, "dist": float(res)})
+
 out = Path(__file__).with_name("fixtures.json")
 out.write_text(json.dumps({"generator": "numpy " + np.__version__, "seed": 20261104, **cases}, indent=1))
 print(f"wrote {out} · {sum(len(v) for v in cases.values())} cases")

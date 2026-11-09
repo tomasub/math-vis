@@ -77,6 +77,34 @@ test('randomRankMatrix has the requested rank', () => {
   for (const r of [0, 1, 2]) { const A = L.randomRankMatrix(3, 2, r); assert.equal(L.splitInputSpace(A).rank, r); }
 });
 
+fx.invertibility.forEach((c, i) => test(`det/svd/eig/inverse #${i} vs numpy`, () => {
+  near(L.det(c.rows), c.det, 1e-9, 1e-9);
+  L.singularValues(c.rows).forEach((v, j) => near(v, c.sv[j], 1e-9, 1e-9));
+  const ev = L.eigenvaluesSmall(c.rows);
+  assert.equal(ev.length, c.eig.length);
+  if (!c.singular) ev.forEach((z, j) => { near(z.re, c.eig[j][0], 1e-6, 1e-6); near(Math.abs(z.im), Math.abs(c.eig[j][1]), 1e-6, 1e-6); });
+  const inv = L.inverse(c.rows);
+  if (c.singular) assert.equal(inv, null);
+  else inv.forEach((r, a) => r.forEach((v, b) => near(v, c.inv[a][b], 1e-8, 1e-8)));
+}));
+fx.svRect.forEach((c, i) => test(`singularValues rectangular #${i} vs numpy`, () => {
+  const sv = L.singularValues(c.rows);
+  assert.equal(sv.length, c.sv.length);
+  sv.forEach((v, j) => near(v, c.sv[j], 1e-9, 1e-9));
+}));
+fx.classify.forEach((c, i) => test(`classifySolvability #${i} vs numpy`, () => {
+  const r = L.classifySolvability(c.rows, c.b);
+  assert.equal(r.kind, c.kind);
+  near(r.dist, c.dist, 1e-8, 1e-8);
+}));
+test('eigenvaluesSmall: complex pair, singular 3x3, sampleInBall', () => {
+  const e = L.eigenvaluesSmall([[0, -1], [1, 0]]);
+  near(e[0].re, 0, 0, 1e-12); near(Math.abs(e[0].im), 1, 1e-12);
+  const z = L.eigenvaluesSmall([[1, 2, 3], [2, 4, 6], [1, 1, 1]]);
+  near(Math.hypot(z[0].re, z[0].im), 0, 0, 1e-9);
+  for (let i = 0; i < 50; i++) assert.ok(L.norm(L.sampleInBall(3, 2)) <= 2 + 1e-12);
+});
+
 /* ---------- 2. edge cases and formatting ---------- */
 test('k > n forces dependence', () => assert.equal(L.relationText(L.analyse([[1, 0], [0, 1], [2, -1]]).rel), 'q₃ = 2q₁ − q₂'));
 test('zero vector', () => assert.equal(L.relationText(L.analyse([[0, 0]]).rel), 'q₁ = 0'));
